@@ -1,109 +1,418 @@
--- Tux's Keyless Menu
+-- Tux's Enhanced Keyless Menu GUI
 local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Name = "TuxsKeylessMenu"
 ScreenGui.Parent = game:GetService("CoreGui")
 
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local Camera = workspace.CurrentCamera
+local LocalPlayer = Players.LocalPlayer
+
+-- Main Frame
 local MainFrame = Instance.new("Frame")
-MainFrame.Size = UDim2.new(0, 200, 0, 500)
+MainFrame.Size = UDim2.new(0, 220, 0, 600)
 MainFrame.Position = UDim2.new(0, 10, 0, 10)
-MainFrame.BackgroundColor3 = Color3.fromRGB(128, 0, 128) -- Purple color
+MainFrame.BackgroundColor3 = Color3.fromRGB(128, 0, 128)
+MainFrame.BorderSizePixel = 2
+MainFrame.BorderColor3 = Color3.fromRGB(255, 255, 255)
 MainFrame.Parent = ScreenGui
 
+-- RGB Animation for Main Frame
+local rgbEnabled = false
+local rgbConnection
+
+local function startRGB()
+    if rgbConnection then rgbConnection:Disconnect() end
+    rgbConnection = RunService.Heartbeat:Connect(function()
+        if rgbEnabled then
+            local time = tick() * 2
+            local r = math.sin(time) * 127 + 128
+            local g = math.sin(time + 2) * 127 + 128
+            local b = math.sin(time + 4) * 127 + 128
+            MainFrame.BackgroundColor3 = Color3.fromRGB(r, g, b)
+            MainFrame.BorderColor3 = Color3.fromRGB(255 - r, 255 - g, 255 - b)
+        end
+    end)
+end
+
+-- Title
 local Title = Instance.new("TextLabel")
 Title.Size = UDim2.new(1, 0, 0, 50)
 Title.Position = UDim2.new(0, 0, 0, 0)
 Title.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 Title.TextColor3 = Color3.fromRGB(255, 255, 255)
-Title.Text = "Tux's Keyless Menu"
+Title.Text = "Tux's Enhanced Menu"
 Title.TextScaled = true
+Title.Font = Enum.Font.GothamBold
 Title.Parent = MainFrame
 
--- Fly Toggle
-local FlyToggle = Instance.new("TextButton")
-FlyToggle.Size = UDim2.new(1, 0, 0, 40)
-FlyToggle.Position = UDim2.new(0, 0, 0, 50)
-FlyToggle.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-FlyToggle.TextColor3 = Color3.fromRGB(255, 255, 255)
-FlyToggle.Text = "Fly"
-FlyToggle.Parent = MainFrame
+-- Scroll Frame for buttons
+local ScrollFrame = Instance.new("ScrollingFrame")
+ScrollFrame.Size = UDim2.new(1, 0, 1, -50)
+ScrollFrame.Position = UDim2.new(0, 0, 0, 50)
+ScrollFrame.BackgroundTransparency = 1
+ScrollFrame.ScrollBarThickness = 10
+ScrollFrame.CanvasSize = UDim2.new(0, 0, 0, 800)
+ScrollFrame.Parent = MainFrame
 
+-- Button Creation Function
+local function createButton(name, position, clickFunction)
+    local button = Instance.new("TextButton")
+    button.Size = UDim2.new(1, -10, 0, 35)
+    button.Position = UDim2.new(0, 5, 0, position)
+    button.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+    button.TextColor3 = Color3.fromRGB(255, 255, 255)
+    button.Text = name
+    button.Font = Enum.Font.Gotham
+    button.TextScaled = true
+    button.BorderSizePixel = 1
+    button.BorderColor3 = Color3.fromRGB(100, 100, 100)
+    button.Parent = ScrollFrame
+    
+    -- Button hover effect
+    button.MouseEnter:Connect(function()
+        button.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+    end)
+    
+    button.MouseLeave:Connect(function()
+        button.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+    end)
+    
+    button.MouseButton1Click:Connect(clickFunction)
+    return button
+end
+
+-- Variables
 local isFlying = false
+local isNoClipping = false
+local isESPEnabled = false
+local isAimbotEnabled = false
+local aimbotFOV = 200
+local isGodModeEnabled = false
+local speedwalkValue = 16
+local jumpboostValue = 50
 
-FlyToggle.MouseButton1Click:Connect(function()
-    local Player = game.Players.LocalPlayer
-    local Character = Player.Character or Player.CharacterAdded:Wait()
-    local Humanoid = Character:WaitForChild("Humanoid")
-    local BodyVelocity = Instance.new("BodyVelocity")
-    BodyVelocity.Velocity = Vector3.new(0, 50, 0)
-    BodyVelocity.MaxForce = Vector3.new(4000, 4000, 4000)
-    BodyVelocity.Parent = Character:WaitForChild("HumanoidRootPart")
+-- Fly Variables
+local flySpeed = 16
+local bodyVelocity, bodyAngularVelocity
+local flyConnection
 
-    isFlying = not isFlying
-    if isFlying then
-        FlyToggle.Text = "Fly (On)"
+-- RGB Toggle
+local RGBToggle = createButton("RGB Mode", 10, function()
+    rgbEnabled = not rgbEnabled
+    if rgbEnabled then
+        RGBToggle.Text = "RGB Mode (ON)"
+        RGBToggle.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
+        startRGB()
     else
-        FlyToggle.Text = "Fly (Off)"
-        BodyVelocity:Destroy()
+        RGBToggle.Text = "RGB Mode (OFF)"
+        RGBToggle.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+        if rgbConnection then rgbConnection:Disconnect() end
+        MainFrame.BackgroundColor3 = Color3.fromRGB(128, 0, 128)
+        MainFrame.BorderColor3 = Color3.fromRGB(255, 255, 255)
+    end
+end)
+
+-- Enhanced Fly Toggle
+local FlyToggle = createButton("Fly", 55, function()
+    isFlying = not isFlying
+    local character = LocalPlayer.Character
+    if not character then return end
+    
+    local humanoid = character:FindFirstChild("Humanoid")
+    local rootPart = character:FindFirstChild("HumanoidRootPart")
+    if not humanoid or not rootPart then return end
+    
+    if isFlying then
+        FlyToggle.Text = "Fly (ON)"
+        FlyToggle.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
+        
+        -- Create BodyVelocity and BodyAngularVelocity
+        bodyVelocity = Instance.new("BodyVelocity")
+        bodyVelocity.Velocity = Vector3.new(0, 0, 0)
+        bodyVelocity.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+        bodyVelocity.Parent = rootPart
+        
+        bodyAngularVelocity = Instance.new("BodyAngularVelocity")
+        bodyAngularVelocity.AngularVelocity = Vector3.new(0, 0, 0)
+        bodyAngularVelocity.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
+        bodyAngularVelocity.Parent = rootPart
+        
+        -- Fly control loop
+        flyConnection = RunService.Heartbeat:Connect(function()
+            if bodyVelocity and bodyVelocity.Parent then
+                local camera = workspace.CurrentCamera
+                local moveVector = Vector3.new(0, 0, 0)
+                
+                if UserInputService:IsKeyDown(Enum.KeyCode.W) then
+                    moveVector = moveVector + camera.CFrame.LookVector
+                end
+                if UserInputService:IsKeyDown(Enum.KeyCode.S) then
+                    moveVector = moveVector - camera.CFrame.LookVector
+                end
+                if UserInputService:IsKeyDown(Enum.KeyCode.A) then
+                    moveVector = moveVector - camera.CFrame.RightVector
+                end
+                if UserInputService:IsKeyDown(Enum.KeyCode.D) then
+                    moveVector = moveVector + camera.CFrame.RightVector
+                end
+                if UserInputService:IsKeyDown(Enum.KeyCode.Space) then
+                    moveVector = moveVector + Vector3.new(0, 1, 0)
+                end
+                if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then
+                    moveVector = moveVector - Vector3.new(0, 1, 0)
+                end
+                
+                bodyVelocity.Velocity = moveVector * flySpeed
+            end
+        end)
+    else
+        FlyToggle.Text = "Fly (OFF)"
+        FlyToggle.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+        
+        if flyConnection then
+            flyConnection:Disconnect()
+            flyConnection = nil
+        end
+        
+        if bodyVelocity then
+            bodyVelocity:Destroy()
+            bodyVelocity = nil
+        end
+        
+        if bodyAngularVelocity then
+            bodyAngularVelocity:Destroy()
+            bodyAngularVelocity = nil
+        end
     end
 end)
 
 -- NoClip Toggle
-local NoClipToggle = Instance.new("TextButton")
-NoClipToggle.Size = UDim2.new(1, 0, 0, 40)
-NoClipToggle.Position = UDim2.new(0, 0, 0, 90)
-NoClipToggle.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-NoClipToggle.TextColor3 = Color3.fromRGB(255, 255, 255)
-NoClipToggle.Text = "NoClip"
-NoClipToggle.Parent = MainFrame
-
-local isNoClipping = false
-
-NoClipToggle.MouseButton1Click:Connect(function()
-    local Player = game.Players.LocalPlayer
-    local Character = Player.Character or Player.CharacterAdded:Wait()
-    local Humanoid = Character:WaitForChild("Humanoid")
-
+local NoClipToggle = createButton("NoClip", 100, function()
     isNoClipping = not isNoClipping
+    local character = LocalPlayer.Character
+    if not character then return end
+    
     if isNoClipping then
-        NoClipToggle.Text = "NoClip (On)"
-        Humanoid.PlatformStand = true
+        NoClipToggle.Text = "NoClip (ON)"
+        NoClipToggle.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
+        
+        for _, part in pairs(character:GetChildren()) do
+            if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
+                part.CanCollide = false
+            end
+        end
     else
-        NoClipToggle.Text = "NoClip (Off)"
-        Humanoid.PlatformStand = false
+        NoClipToggle.Text = "NoClip (OFF)"
+        NoClipToggle.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+        
+        for _, part in pairs(character:GetChildren()) do
+            if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
+                part.CanCollide = true
+            end
+        end
     end
 end)
 
--- RGB Menu Toggle
-local RGBMenuToggle = Instance.new("TextButton")
-RGBMenuToggle.Size = UDim2.new(1, 0, 0, 40)
-RGBMenuToggle.Position = UDim2.new(0, 0, 0, 130)
-RGBMenuToggle.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-RGBMenuToggle.TextColor3 = Color3.fromRGB(255, 255, 255)
-RGBMenuToggle.Text = "RGB M3NU"
-RGBMenuToggle.Parent = MainFrame
+-- Speedwalk Toggle
+local SpeedwalkToggle = createButton("Speedwalk: " .. speedwalkValue, 145, function()
+    local character = LocalPlayer.Character
+    if not character then return end
+    
+    local humanoid = character:FindFirstChild("Humanoid")
+    if not humanoid then return end
+    
+    speedwalkValue = speedwalkValue + 4
+    if speedwalkValue > 100 then
+        speedwalkValue = 16
+    end
+    
+    humanoid.WalkSpeed = speedwalkValue
+    SpeedwalkToggle.Text = "Speedwalk: " .. speedwalkValue
+end)
 
-local isRGBMenuOpen = false
+-- Jumpboost Toggle
+local JumpboostToggle = createButton("Jumpboost: " .. jumpboostValue, 190, function()
+    local character = LocalPlayer.Character
+    if not character then return end
+    
+    local humanoid = character:FindFirstChild("Humanoid")
+    if not humanoid then return end
+    
+    jumpboostValue = jumpboostValue + 10
+    if jumpboostValue > 150 then
+        jumpboostValue = 50
+    end
+    
+    humanoid.JumpPower = jumpboostValue
+    JumpboostToggle.Text = "Jumpboost: " .. jumpboostValue
+end)
 
-RGBMenuToggle.MouseButton1Click:Connect(function()
-    isRGBMenuOpen = not isRGBMenuOpen
-    if isRGBMenuOpen then
-        RGBMenuToggle.Text = "RGB M3NU (Open)"
-        -- Implement RGB menu functionality
+-- ESP Toggle
+local ESPToggle = createButton("ESP", 235, function()
+    isESPEnabled = not isESPEnabled
+    
+    if isESPEnabled then
+        ESPToggle.Text = "ESP (ON)"
+        ESPToggle.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
+        
+        for _, player in pairs(Players:GetPlayers()) do
+            if player ~= LocalPlayer and player.Character then
+                local character = player.Character
+                local humanoidRootPart = character:FindFirstChild("HumanoidRootPart")
+                
+                if humanoidRootPart then
+                    local highlight = Instance.new("Highlight")
+                    highlight.Name = "ESP_Highlight"
+                    highlight.Adornee = character
+                    highlight.FillColor = Color3.fromRGB(255, 0, 0)
+                    highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
+                    highlight.FillTransparency = 0.5
+                    highlight.OutlineTransparency = 0
+                    highlight.Parent = character
+                end
+            end
+        end
+        
+        -- Handle new players joining
+        Players.PlayerAdded:Connect(function(player)
+            if isESPEnabled then
+                player.CharacterAdded:Connect(function(character)
+                    wait(1)
+                    if isESPEnabled and character then
+                        local highlight = Instance.new("Highlight")
+                        highlight.Name = "ESP_Highlight"
+                        highlight.Adornee = character
+                        highlight.FillColor = Color3.fromRGB(255, 0, 0)
+                        highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
+                        highlight.FillTransparency = 0.5
+                        highlight.OutlineTransparency = 0
+                        highlight.Parent = character
+                    end
+                end)
+            end
+        end)
     else
-        RGBMenuToggle.Text = "RGB M3NU (Closed)"
+        ESPToggle.Text = "ESP (OFF)"
+        ESPToggle.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+        
+        for _, player in pairs(Players:GetPlayers()) do
+            if player.Character then
+                local highlight = player.Character:FindFirstChild("ESP_Highlight")
+                if highlight then
+                    highlight:Destroy()
+                end
+            end
+        end
+    end
+end)
+
+-- Aimbot FOV Circle
+local FOVCircle = Drawing.new("Circle")
+FOVCircle.Color = Color3.fromRGB(255, 255, 255)
+FOVCircle.Thickness = 2
+FOVCircle.Transparency = 0.8
+FOVCircle.Filled = false
+FOVCircle.Radius = aimbotFOV
+FOVCircle.Position = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
+FOVCircle.Visible = false
+
+-- Aimbot Functions
+local function getClosestPlayer()
+    local closestPlayer = nil
+    local shortestDistance = math.huge
+    
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+            local humanoidRootPart = player.Character.HumanoidRootPart
+            local vector, onScreen = Camera:WorldToViewportPoint(humanoidRootPart.Position)
+            
+            if onScreen then
+                local mousePos = UserInputService:GetMouseLocation()
+                local distance = (Vector2.new(vector.X, vector.Y) - mousePos).Magnitude
+                
+                if distance < aimbotFOV and distance < shortestDistance then
+                    closestPlayer = player
+                    shortestDistance = distance
+                end
+            end
+        end
+    end
+    
+    return closestPlayer
+end
+
+local aimbotConnection
+
+-- Aimbot Toggle
+local AimbotToggle = createButton("Aimbot", 280, function()
+    isAimbotEnabled = not isAimbotEnabled
+    
+    if isAimbotEnabled then
+        AimbotToggle.Text = "Aimbot (ON)"
+        AimbotToggle.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
+        FOVCircle.Visible = true
+        
+        aimbotConnection = RunService.Heartbeat:Connect(function()
+            if isAimbotEnabled then
+                local closestPlayer = getClosestPlayer()
+                if closestPlayer and closestPlayer.Character and closestPlayer.Character:FindFirstChild("Head") then
+                    local head = closestPlayer.Character.Head
+                    Camera.CFrame = CFrame.lookAt(Camera.CFrame.Position, head.Position)
+                end
+                
+                -- Update FOV circle position
+                FOVCircle.Position = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
+            end
+        end)
+    else
+        AimbotToggle.Text = "Aimbot (OFF)"
+        AimbotToggle.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+        FOVCircle.Visible = false
+        
+        if aimbotConnection then
+            aimbotConnection:Disconnect()
+            aimbotConnection = nil
+        end
+    end
+end)
+
+-- Aimbot FOV Adjuster
+local FOVToggle = createButton("FOV: " .. aimbotFOV, 325, function()
+    aimbotFOV = aimbotFOV + 50
+    if aimbotFOV > 500 then
+        aimbotFOV = 100
+    end
+    
+    FOVCircle.Radius = aimbotFOV
+    FOVToggle.Text = "FOV: " .. aimbotFOV
+end)
+
+-- God Mode Toggle
+local GodModeToggle = createButton("God Mode", 370, function()
+    isGodModeEnabled = not isGodModeEnabled
+    local character = LocalPlayer.Character
+    if not character then return end
+    
+    local humanoid = character:FindFirstChild("Humanoid")
+    if not humanoid then return end
+    
+    if isGodModeEnabled then
+        GodModeToggle.Text = "God Mode (ON)"
+        GodModeToggle.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
+        humanoid.MaxHealth = math.huge
+        humanoid.Health = math.huge
+    else
+        GodModeToggle.Text = "God Mode (OFF)"
+        GodModeToggle.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+        humanoid.MaxHealth = 100
+        humanoid.Health = 100
     end
 end)
 
 -- Visit Discord Button
-local DiscordButton = Instance.new("TextButton")
-DiscordButton.Size = UDim2.new(1, 0, 0, 40)
-DiscordButton.Position = UDim2.new(0, 0, 0, 170)
-DiscordButton.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-DiscordButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-DiscordButton.Text = "Visit Discord"
-DiscordButton.Parent = MainFrame
-
-DiscordButton.MouseButton1Click:Connect(function()
+local DiscordButton = createButton("Visit Discord", 415, function()
     setclipboard("https://discord.gg/4F7rMQtGhe")
     game.StarterGui:SetCore("SendNotification", {
         Title = "Discord Link",
@@ -112,261 +421,29 @@ DiscordButton.MouseButton1Click:Connect(function()
     })
 end)
 
--- Speedwalk Slider
-local SpeedwalkSlider = Instance.new("TextButton")
-SpeedwalkSlider.Size = UDim2.new(1, 0, 0, 40)
-SpeedwalkSlider.Position = UDim2.new(0, 0, 0, 210)
-SpeedwalkSlider.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-SpeedwalkSlider.TextColor3 = Color3.fromRGB(255, 255, 255)
-SpeedwalkSlider.Text = "Speedwalk"
-SpeedwalkSlider.Parent = MainFrame
-
-local speedwalkValue = 16
-
-SpeedwalkSlider.MouseButton1Click:Connect(function()
-    local Player = game.Players.LocalPlayer
-    local Character = Player.Character or Player.CharacterAdded:Wait()
-    local Humanoid = Character:WaitForChild("Humanoid")
-    speedwalkValue = speedwalkValue + 4
-    if speedwalkValue > 100 then
-        speedwalkValue = 16
-    end
-    Humanoid.WalkSpeed = speedwalkValue
-    SpeedwalkSlider.Text = "Speedwalk: " .. speedwalkValue
+-- Infinite Yield Toggle
+local InfiniteYieldToggle = createButton("Infinite Yield", 460, function()
+    loadstring(game:HttpGet('https://raw.githubusercontent.com/EdgeIY/infiniteyield/master/source'))()
 end)
 
--- Jumpboost Slider
-local JumpboostSlider = Instance.new("TextButton")
-JumpboostSlider.Size = UDim2.new(1, 0, 0, 40)
-JumpboostSlider.Position = UDim2.new(0, 0, 0, 250)
-JumpboostSlider.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-JumpboostSlider.TextColor3 = Color3.fromRGB(255, 255, 255)
-JumpboostSlider.Text = "Jumpboost"
-JumpboostSlider.Parent = MainFrame
-
-local jumpboostValue = 50
-
-JumpboostSlider.MouseButton1Click:Connect(function()
-    local Player = game.Players.LocalPlayer
-    local Character = Player.Character or Player.CharacterAdded:Wait()
-    local Humanoid = Character:WaitForChild("Humanoid")
-    jumpboostValue = jumpboostValue + 10
-    if jumpboostValue > 100 then
-        jumpboostValue = 50
-    end
-    Humanoid.JumpPower = jumpboostValue
-    JumpboostSlider.Text = "Jumpboost: " .. jumpboostValue
-end)
-
--- ESP Toggle
-local ESPToggle = Instance.new("TextButton")
-ESPToggle.Size = UDim2.new(1, 0, 0, 40)
-ESPToggle.Position = UDim2.new(0, 0, 0, 290)
-ESPToggle.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-ESPToggle.TextColor3 = Color3.fromRGB(255, 255, 255)
-ESPToggle.Text = "ESP"
-ESPToggle.Parent = MainFrame
-
-local isESPEnabled = false
-
-ESPToggle.MouseButton1Click:Connect(function()
-    isESPEnabled = not isESPEnabled
+-- Clean up on character respawn
+LocalPlayer.CharacterAdded:Connect(function()
+    wait(1)
     if isESPEnabled then
-        ESPToggle.Text = "ESP (On)"
-        for _, player in ipairs(game.Players:GetPlayers()) do
-            if player ~= game.Players.LocalPlayer then
-                local Character = player.Character
-                if Character then
-                    local Box = Drawing.new("Square")
-                    Box.Visible = true
-                    Box.Color = Color3.fromRGB(255, 0, 0)
-                    Box.Thickness = 2
-                    Box.Filled = false
-                    Box.Size = Vector2.new(2000, 2000)
-                    Box.Position = Vector2.new(Character.HumanoidRootPart.Position.X, Character.HumanoidRootPart.Position.Y)
-
-                    game:GetService("RunService").RenderStepped:Connect(function()
-                        Box.Position = Vector2.new(Character.HumanoidRootPart.Position.X, Character.HumanoidRootPart.Position.Y)
-                    end)
-                end
-            end
-        end
-    else
-        ESPToggle.Text = "ESP (Off)"
-        -- Clear ESP boxes
-        for _, drawing in ipairs(Drawing:GetChildren()) do
-            if drawing:IsA("Square") then
-                drawing:Remove()
-            end
-        end
+        ESPToggle.Text = "ESP (OFF)"
+        ESPToggle.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+        isESPEnabled = false
+    end
+    
+    if isFlying then
+        FlyToggle.Text = "Fly (OFF)"
+        FlyToggle.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+        isFlying = false
+        if flyConnection then flyConnection:Disconnect() end
     end
 end)
 
--- Aimbot Toggle
-local AimbotToggle = Instance.new("TextButton")
-AimbotToggle.Size = UDim2.new(1, 0, 0, 40)
-AimbotToggle.Position = UDim2.new(0, 0, 0, 330)
-AimbotToggle.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-AimbotToggle.TextColor3 = Color3.fromRGB(255, 255, 255)
-AimbotToggle.Text = "Aimbot"
-AimbotToggle.Parent = MainFrame
+-- Initialize RGB
+startRGB()
 
-local isAimbotEnabled = false
-
-AimbotToggle.MouseButton1Click:Connect(function()
-    isAimbotEnabled = not isAimbotEnabled
-    if isAimbotEnabled then
-        AimbotToggle.Text = "Aimbot (On)"
-        -- Implement Aimbot functionality
-    else
-        AimbotToggle.Text = "Aimbot (Off)"
-    end
-end)
-
--- Silent Aim Toggle
-local SilentAimToggle = Instance.new("TextButton")
-SilentAimToggle.Size = UDim2.new(1, 0, 0, 40)
-SilentAimToggle.Position = UDim2.new(0, 0, 0, 370)
-SilentAimToggle.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-SilentAimToggle.TextColor3 = Color3.fromRGB(255, 255, 255)
-SilentAimToggle.Text = "Silent Aim"
-SilentAimToggle.Parent = MainFrame
-
-local isSilentAimEnabled = false
-
-SilentAimToggle.MouseButton1Click:Connect(function()
-    isSilentAimEnabled = not isSilentAimEnabled
-    if isSilentAimEnabled then
-        SilentAimToggle.Text = "Silent Aim (On)"
-        -- Implement Silent Aim functionality
-    else
-        SilentAimToggle.Text = "Silent Aim (Off)"
-    end
-end)
-
--- Additional Mods Section
-local AdditionalModsSection = Instance.new("Frame")
-AdditionalModsSection.Size = UDim2.new(1, 0, 0, 100)
-AdditionalModsSection.Position = UDim2.new(0, 0, 0, 410)
-AdditionalModsSection.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-AdditionalModsSection.Parent = MainFrame
-
-local AdditionalModsTitle = Instance.new("TextLabel")
-AdditionalModsTitle.Size = UDim2.new(1, 0, 0, 30)
-AdditionalModsTitle.Position = UDim2.new(0, 0, 0, 0)
-AdditionalModsTitle.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-AdditionalModsTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
-AdditionalModsTitle.Text = "Additional Mods"
-AdditionalModsTitle.TextScaled = true
-AdditionalModsTitle.Parent = AdditionalModsSection
-
--- Mod 1: Infinite Yield
-local InfiniteYieldToggle = Instance.new("TextButton")
-InfiniteYieldToggle.Size = UDim2.new(1, 0, 0, 30)
-InfiniteYieldToggle.Position = UDim2.new(0, 0, 0, 30)
-InfiniteYieldToggle.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-InfiniteYieldToggle.TextColor3 = Color3.fromRGB(255, 255, 255)
-InfiniteYieldToggle.Text = "Infinite Yield"
-InfiniteYieldToggle.Parent = AdditionalModsSection
-
-local isInfiniteYieldEnabled = false
-
-InfiniteYieldToggle.MouseButton1Click:Connect(function()
-    isInfiniteYieldEnabled = not isInfiniteYieldEnabled
-    if isInfiniteYieldEnabled then
-        InfiniteYieldToggle.Text = "Infinite Yield (On)"
-        -- Implement Infinite Yield functionality
-    else
-        InfiniteYieldToggle.Text = "Infinite Yield (Off)"
-    end
-end)
-
--- Mod 2: God Mode
-local GodModeToggle = Instance.new("TextButton")
-GodModeToggle.Size = UDim2.new(1, 0, 0, 30)
-GodModeToggle.Position = UDim2.new(0, 0, 0, 60)
-GodModeToggle.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-GodModeToggle.TextColor3 = Color3.fromRGB(255, 255, 255)
-GodModeToggle.Text = "God Mode"
-GodModeToggle.Parent = AdditionalModsSection
-
-local isGodModeEnabled = false
-
-GodModeToggle.MouseButton1Click:Connect(function()
-    isGodModeEnabled = not isGodModeEnabled
-    if isGodModeEnabled then
-        GodModeToggle.Text = "God Mode (On)"
-        local Player = game.Players.LocalPlayer
-        local Character = Player.Character or Player.CharacterAdded:Wait()
-        local Humanoid = Character:WaitForChild("Humanoid")
-        Humanoid.Health = math.huge
-        Humanoid.MaxHealth = math.huge
-    else
-        GodModeToggle.Text = "God Mode (Off)"
-        local Player = game.Players.LocalPlayer
-        local Character = Player.Character or Player.CharacterAdded:Wait()
-        local Humanoid = Character:WaitForChild("Humanoid")
-        Humanoid.Health = 100
-        Humanoid.MaxHealth = 100
-    end
-end)
-
--- Mod 3: Noclip Walk
-local NoclipWalkToggle = Instance.new("TextButton")
-NoclipWalkToggle.Size = UDim2.new(1, 0, 0, 30)
-NoclipWalkToggle.Position = UDim2.new(0, 0, 0, 90)
-NoclipWalkToggle.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-NoclipWalkToggle.TextColor3 = Color3.fromRGB(255, 255, 255)
-NoclipWalkToggle.Text = "Noclip Walk"
-NoclipWalkToggle.Parent = AdditionalModsSection
-
-local isNoclipWalkEnabled = false
-
-NoclipWalkToggle.MouseButton1Click:Connect(function()
-    isNoclipWalkEnabled = not isNoclipWalkEnabled
-    if isNoclipWalkEnabled then
-        NoclipWalkToggle.Text = "Noclip Walk (On)"
-        local Player = game.Players.LocalPlayer
-        local Character = Player.Character or Player.CharacterAdded:Wait()
-        local Humanoid = Character:WaitForChild("Humanoid")
-        Humanoid.PlatformStand = true
-    else
-        NoclipWalkToggle.Text = "Noclip Walk (Off)"
-        local Player = game.Players.LocalPlayer
-        local Character = Player.Character or Player.CharacterAdded:Wait()
-        local Humanoid = Character:WaitForChild("Humanoid")
-        Humanoid.PlatformStand = false
-    end
-end)
-
--- Mod 4: Fast Swing
-local FastSwingToggle = Instance.new("TextButton")
-FastSwingToggle.Size = UDim2.new(1, 0, 0, 30)
-FastSwingToggle.Position = UDim2.new(0, 0, 0, 120)
-FastSwingToggle.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-FastSwingToggle.TextColor3 = Color3.fromRGB(255, 255, 255)
-FastSwingToggle.Text = "Fast Swing"
-FastSwingToggle.Parent = AdditionalModsSection
-
-local isFastSwingEnabled = false
-
-FastSwingToggle.MouseButton1Click:Connect(function()
-    isFastSwingEnabled = not isFastSwingEnabled
-    if isFastSwingEnabled then
-        FastSwingToggle.Text = "Fast Swing (On)"
-        -- Implement Fast Swing functionality
-    else
-        FastSwingToggle.Text = "Fast Swing (Off)"
-    end
-end)
-
--- Mod 5: Infinite Stamina
-local InfiniteStaminaToggle = Instance.new("TextButton")
-InfiniteStaminaToggle.Size = UDim2.new(1, 0, 0, 30)
-InfiniteStaminaToggle.Position = UDim2.new(0, 0, 0, 150)
-InfiniteStaminaToggle.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-InfiniteStaminaToggle.TextColor3 = Color3.fromRGB(255, 255, 255)
-InfiniteStaminaToggle.Text = "Infinite Stamina"
-InfiniteStaminaToggle.Parent = AdditionalModsSection
-
-local isInfiniteStamina
+print("Tux's Sigma Menu Loaded Successfully!")
