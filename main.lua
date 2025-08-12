@@ -1,643 +1,438 @@
--- Tux's DaHood Menu with Working Aimbot
-local Rayfield = loadstring(game:HttpGet('https://raw.githubusercontent.com/jensonhirst/Rayfield/main/source'))()
+if getgenv().Aiming then return getgenv().Aiming end
 
-local Window = Rayfield:CreateWindow({
-   Name = "Tux's DaHood Menu",
-   LoadingTitle = "Loading Tux's Menu",
-   LoadingSubtitle = "by Tux",
-   ConfigurationSaving = {
-      Enabled = true,
-      FolderName = nil,
-      FileName = "TuxDaHoodConfig"
-   },
-   Discord = {
-      Enabled = true,
-      Invite = "4F7rMQtGhe",
-      RememberJoins = true
-   },
-   KeySystem = false,
-   KeySettings = {
-      Title = "Tux's Menu",
-      Subtitle = "Key System",
-      Note = "No key needed for this script!",
-      FileName = "TuxKey",
-      SaveKey = false,
-      GrabKeyFromSite = false,
-      Key = {""}
-   }
-})
-
--- Services
+-- // Services
 local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
-local UserInputService = game:GetService("UserInputService")
-local TweenService = game:GetService("TweenService")
 local Workspace = game:GetService("Workspace")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local StarterGui = game:GetService("StarterGui")
+local GuiService = game:GetService("GuiService")
+local RunService = game:GetService("RunService")
 
+-- // Vars
+local Heartbeat = RunService.Heartbeat
 local LocalPlayer = Players.LocalPlayer
-local Camera = Workspace.CurrentCamera
+local CurrentCamera = Workspace.CurrentCamera
 local Mouse = LocalPlayer:GetMouse()
 
--- Variables
-local aimbotEnabled = false
-local aimbotKey = Enum.KeyCode.E
-local aimbotFOV = 200
-local aimbotSmoothness = 0.5
-local aimbotVisibleCheck = false
-local aimbotTeamCheck = false
-local aimbotWallCheck = false
-local aimbotTargetPart = "Head"
+-- // Optimisation Vars (ugly)
+local Drawingnew = Drawing.new
+local Color3fromRGB = Color3.fromRGB
+local Vector2new = Vector2.new
+local GetGuiInset = GuiService.GetGuiInset
+local Randomnew = Random.new
+local mathfloor = math.floor
+local CharacterAdded = LocalPlayer.CharacterAdded
+local CharacterAddedWait = CharacterAdded.Wait
+local WorldToViewportPoint = CurrentCamera.WorldToViewportPoint
+local RaycastParamsnew = RaycastParams.new
+local EnumRaycastFilterTypeBlacklist = Enum.RaycastFilterType.Blacklist
+local Raycast = Workspace.Raycast
+local GetPlayers = Players.GetPlayers
+local Instancenew = Instance.new
+local IsDescendantOf = Instancenew("Part").IsDescendantOf
+local FindFirstChildWhichIsA = Instancenew("Part").FindFirstChildWhichIsA
+local FindFirstChild = Instancenew("Part").FindFirstChild
+local tableremove = table.remove
+local tableinsert = table.insert
 
-local espEnabled = false
-local flyEnabled = false
-local noclipEnabled = false
-local speedEnabled = false
-local jumpEnabled = false
-local godmodeEnabled = false
+-- // Silent Aim Vars
+getgenv().Aiming = {
+    Enabled = true,
 
--- Aimbot Variables
-local targetPlayer = nil
-local isAiming = false
-local currentTarget = nil
+    ShowFOV = false,
+    FOV = 119,
+    FOVSides = 300,
+    FOVColour = Color3fromRGB(66, 26, 101),
 
--- Connections
-local aimbotConnection
-local aimbotKeyConnection
-local espConnection
-local flyConnection
-local noclipConnection
-local speedConnection
-
--- Objects
-local flyBodyVelocity
-local flyBodyAngularVelocity
-local espObjects = {}
-
--- FOV Circle for Aimbot
-local FOVCircle = Drawing.new("Circle")
-FOVCircle.Color = Color3.new(1, 1, 1)
-FOVCircle.Thickness = 2
-FOVCircle.NumSides = 100
-FOVCircle.Radius = aimbotFOV
-FOVCircle.Transparency = 0.7
-FOVCircle.Visible = false
-FOVCircle.Filled = false
-
--- Target Circle
-local TargetCircle = Drawing.new("Circle")
-TargetCircle.Color = Color3.new(1, 0, 0)
-TargetCircle.Thickness = 3
-TargetCircle.NumSides = 100
-TargetCircle.Radius = 20
-TargetCircle.Transparency = 1
-TargetCircle.Visible = false
-TargetCircle.Filled = false
-
--- Aimbot Functions
-local function isPlayerValid(player)
-    if not player or player == LocalPlayer then
-        return false
-    end
+    VisibleCheck = true,
     
-    if not player.Character then
-        return false
+    HitChance = 110,
+
+    Selected = nil,
+    SelectedPart = nil,
+
+    TargetPart = {"Head", "UpperTorso", "HumanoidRootPart", "LowerTorso"},
+
+    Ignored = {
+        Teams = {
+            {
+                Team = LocalPlayer.Team,
+                TeamColor = LocalPlayer.TeamColor,
+            },
+        },
+        Players = {
+            LocalPlayer,
+            91318356
+        }
+    }
+}
+local Aiming = getgenv().Aiming
+
+-- // Create circle
+local circle = Drawingnew("Circle")
+circle.Transparency = 1
+circle.Thickness = 2
+circle.Color = Aiming.FOVColour
+circle.Filled = false
+Aiming.FOVCircle = circle
+
+-- // Update
+function Aiming.UpdateFOV()
+    -- // Make sure the circle exists
+    if not (circle) then
+        return
     end
-    
-    if aimbotTeamCheck and player.Team == LocalPlayer.Team then
-        return false
+
+    -- // Set Circle Properties
+    circle.Visible = Aiming.ShowFOV
+    circle.Radius = (Aiming.FOV * 3)
+    circle.Position = Vector2new(Mouse.X, Mouse.Y + GetGuiInset(GuiService).Y)
+    circle.NumSides = Aiming.FOVSides
+    circle.Color = Aiming.FOVColour
+
+    -- // Return circle
+    return circle
+end
+
+-- // Custom Functions
+local CalcChance = function(percentage)
+    -- // Floor the percentage
+    percentage = mathfloor(percentage)
+
+    -- // Get the chance
+    local chance = mathfloor(Randomnew().NextNumber(Randomnew(), 0, 1) * 100) / 100
+
+    -- // Return
+    return chance <= percentage / 100
+end
+
+-- // Customisable Checking Functions: Is a part visible
+function Aiming.IsPartVisible(Part, PartDescendant)
+    -- // Vars
+    local Character = LocalPlayer.Character or CharacterAddedWait(CharacterAdded)
+    local Origin = CurrentCamera.CFrame.Position
+    local _, OnScreen = WorldToViewportPoint(CurrentCamera, Part.Position)
+
+    -- //
+    if (OnScreen) then
+        -- // Vars
+        local raycastParams = RaycastParamsnew()
+        raycastParams.FilterType = EnumRaycastFilterTypeBlacklist
+        raycastParams.FilterDescendantsInstances = {Character, CurrentCamera}
+
+        -- // Cast ray
+        local Result = Raycast(Workspace, Origin, Part.Position - Origin, raycastParams)
+
+        -- // Make sure we get a result
+        if (Result) then
+            -- // Vars
+            local PartHit = Result.Instance
+            local Visible = (not PartHit or IsDescendantOf(PartHit, PartDescendant))
+
+            -- // Return
+            return Visible
+        end
     end
-    
+
+    -- // Return
+    return false
+end
+
+-- // Ignore player
+function Aiming.IgnorePlayer(Player)
+    -- // Vars
+    local Ignored = Aiming.Ignored
+    local IgnoredPlayers = Ignored.Players
+
+    -- // Find player in table
+    for _, IgnoredPlayer in ipairs(IgnoredPlayers) do
+        -- // Make sure player matches
+        if (IgnoredPlayer == Player) then
+            return false
+        end
+    end
+
+    -- // Blacklist player
+    tableinsert(IgnoredPlayers, Player)
     return true
 end
 
-local function getTargetPart(player)
-    if not player.Character then
-        return nil
+-- // Unignore Player
+function Aiming.UnIgnorePlayer(Player)
+    -- // Vars
+    local Ignored = Aiming.Ignored
+    local IgnoredPlayers = Ignored.Players
+
+    -- // Find player in table
+    for i, IgnoredPlayer in ipairs(IgnoredPlayers) do
+        -- // Make sure player matches
+        if (IgnoredPlayer == Player) then
+            -- // Remove from ignored
+            tableremove(IgnoredPlayers, i)
+            return true
+        end
     end
-    
-    local targetPart = player.Character:FindFirstChild(aimbotTargetPart)
-    if not targetPart then
-        targetPart = player.Character:FindFirstChild("Head")
-    end
-    
-    return targetPart
+
+    -- //
+    return false
 end
 
-local function isVisible(targetPart)
-    if not aimbotVisibleCheck then
-        return true
+-- // Ignore team
+function Aiming.IgnoreTeam(Team, TeamColor)
+    -- // Vars
+    local Ignored = Aiming.Ignored
+    local IgnoredTeams = Ignored.Teams
+
+    -- // Find team in table
+    for _, IgnoredTeam in ipairs(IgnoredTeams) do
+        -- // Make sure team matches
+        if (IgnoredTeam.Team == Team and IgnoredTeam.TeamColor == TeamColor) then
+            return false
+        end
     end
-    
-    local character = LocalPlayer.Character
-    if not character then
-        return false
-    end
-    
-    local rootPart = character:FindFirstChild("HumanoidRootPart")
-    if not rootPart then
-        return false
-    end
-    
-    local raycastParams = RaycastParams.new()
-    raycastParams.FilterType = Enum.RaycastFilterType.Blacklist
-    raycastParams.FilterDescendantsInstances = {character}
-    
-    local raycastResult = Workspace:Raycast(rootPart.Position, (targetPart.Position - rootPart.Position), raycastParams)
-    
-    if raycastResult then
-        local hit = raycastResult.Instance
-        return hit:IsDescendantOf(targetPart.Parent)
-    end
-    
+
+    -- // Ignore team
+    tableinsert(IgnoredTeams, {Team, TeamColor})
     return true
 end
 
-local function getClosestPlayerInFOV()
-    local closestPlayer = nil
-    local shortestDistance = aimbotFOV
-    local camera = Workspace.CurrentCamera
-    local screenCenter = Vector2.new(camera.ViewportSize.X / 2, camera.ViewportSize.Y / 2)
-    
-    for _, player in pairs(Players:GetPlayers()) do
-        if isPlayerValid(player) then
-            local targetPart = getTargetPart(player)
-            if targetPart then
-                local screenPosition, onScreen = camera:WorldToViewportPoint(targetPart.Position)
-                
-                if onScreen then
-                    local distance = (Vector2.new(screenPosition.X, screenPosition.Y) - screenCenter).Magnitude
-                    
-                    if distance < shortestDistance then
-                        if isVisible(targetPart) then
-                            closestPlayer = player
-                            shortestDistance = distance
-                        end
-                    end
+-- // Unignore team
+function Aiming.UnIgnoreTeam(Team, TeamColor)
+    -- // Vars
+    local Ignored = Aiming.Ignored
+    local IgnoredTeams = Ignored.Teams
+
+    -- // Find team in table
+    for i, IgnoredTeam in ipairs(IgnoredTeams) do
+        -- // Make sure team matches
+        if (IgnoredTeam.Team == Team and IgnoredTeam.TeamColor == TeamColor) then
+            -- // Remove
+            tableremove(IgnoredTeams, i)
+            return true
+        end
+    end
+
+    -- // Return
+    return false
+end
+
+-- //  Toggle team check
+function Aiming.TeamCheck(Toggle)
+    if (Toggle) then
+        return Aiming.IgnoreTeam(LocalPlayer.Team, LocalPlayer.TeamColor)
+    end
+
+    return Aiming.UnIgnoreTeam(LocalPlayer.Team, LocalPlayer.TeamColor)
+end
+
+-- // Check teams
+function Aiming.IsIgnoredTeam(Player)
+    -- // Vars
+    local Ignored = Aiming.Ignored
+    local IgnoredTeams = Ignored.Teams
+
+    -- // Check if team is ignored
+    for _, IgnoredTeam in ipairs(IgnoredTeams) do
+        -- // Make sure team matches
+        if (Player.Team == IgnoredTeam.Team and Player.TeamColor == IgnoredTeam.TeamColor) then
+            return true
+        end
+    end
+
+    -- // Return
+    return false
+end
+
+-- // Check if player (and team) is ignored
+function Aiming.IsIgnored(Player)
+    -- // Vars
+    local Ignored = Aiming.Ignored
+    local IgnoredPlayers = Ignored.Players
+
+    -- // Loop
+    for _, IgnoredPlayer in ipairs(IgnoredPlayers) do
+        -- // Check if Player Id
+        if (typeof(IgnoredPlayer) == "number" and Player.UserId == IgnoredPlayer) then
+            return true
+        end
+
+        -- // Normal Player Instance
+        if (IgnoredPlayer == Player) then
+            return true
+        end
+    end
+
+    -- // Team check
+    return Aiming.IsIgnoredTeam(Player)
+end
+
+-- // Get the Direction, Normal and Material
+function Aiming.Raycast(Origin, Destination, UnitMultiplier)
+    if (typeof(Origin) == "Vector3" and typeof(Destination) == "Vector3") then
+        -- // Handling
+        if (not UnitMultiplier) then UnitMultiplier = 1 end
+
+        -- // Vars
+        local Direction = (Destination - Origin).Unit * UnitMultiplier
+        local Result = Raycast(Workspace, Origin, Direction)
+
+        -- // Make sure we have a result
+        if (Result) then
+            local Normal = Result.Normal
+            local Material = Result.Material
+
+            return Direction, Normal, Material
+        end
+    end
+
+    -- // Return
+    return nil
+end
+
+-- // Get Character
+function Aiming.Character(Player)
+    return Player.Character
+end
+
+-- // Check Health
+function Aiming.CheckHealth(Player)
+    -- // Get Humanoid
+    local Character = Aiming.Character(Player)
+    local Humanoid = FindFirstChildWhichIsA(Character, "Humanoid")
+
+    -- // Get Health
+    local Health = (Humanoid and Humanoid.Health or 0)
+
+    -- //
+    return Health > 0
+end
+
+-- // Check if silent aim can used
+function Aiming.Check()
+    return (Aiming.Enabled == true and Aiming.Selected ~= LocalPlayer and Aiming.SelectedPart ~= nil)
+end
+Aiming.checkSilentAim = Aiming.Check
+
+-- // Get Closest Target Part
+function Aiming.GetClosestTargetPartToCursor(Character)
+    local TargetParts = Aiming.TargetPart
+
+    -- // Vars
+    local ClosestPart = nil
+    local ClosestPartPosition = nil
+    local ClosestPartOnScreen = false
+    local ClosestPartMagnitudeFromMouse = nil
+    local ShortestDistance = 1/0
+
+    -- //
+    local function CheckTargetPart(TargetPart)
+        -- // Convert string -> Instance
+        if (typeof(TargetPart) == "string") then
+            TargetPart = FindFirstChild(Character, TargetPart)
+        end
+
+        -- // Make sure we have a target
+        if not (TargetPart) then
+            return
+        end
+
+        -- // Get the length between Mouse and Target Part (on screen)
+        local PartPos, onScreen = WorldToViewportPoint(CurrentCamera, TargetPart.Position)
+        local GuiInset = GetGuiInset(GuiService)
+        local Magnitude = (Vector2new(PartPos.X, PartPos.Y - GuiInset.Y) - Vector2new(Mouse.X, Mouse.Y)).Magnitude
+
+        -- //
+        if (Magnitude < ShortestDistance) then
+            ClosestPart = TargetPart
+            ClosestPartPosition = PartPos
+            ClosestPartOnScreen = onScreen
+            ClosestPartMagnitudeFromMouse = Magnitude
+            ShortestDistance = Magnitude
+        end
+    end
+
+    -- // String check
+    if (typeof(TargetParts) == "string") then
+        -- // Check if it all
+        if (TargetParts == "All") then
+            -- // Loop through character children
+            for _, v in ipairs(Character:GetChildren()) do
+                -- // See if it a part
+                if not (v:IsA("BasePart")) then
+                    continue
+                end
+
+                -- // Check it
+                CheckTargetPart(v)
+            end
+        else
+            -- // Individual
+            CheckTargetPart(TargetParts)
+        end
+    end
+
+    -- //
+    if (typeof(TargetParts) == "table") then
+        -- // Loop through all target parts and check them
+        for _, TargetPartName in ipairs(TargetParts) do
+            CheckTargetPart(TargetPartName)
+        end
+    end
+
+    -- //
+    return ClosestPart, ClosestPartPosition, ClosestPartOnScreen, ClosestPartMagnitudeFromMouse
+end
+
+-- // Silent Aim Function
+function Aiming.GetClosestPlayerToCursor()
+    -- // Vars
+    local TargetPart = nil
+    local ClosestPlayer = nil
+    local Chance = CalcChance(Aiming.HitChance)
+    local ShortestDistance = 1/0
+
+    -- // Chance
+    if (not Chance) then
+        Aiming.Selected = LocalPlayer
+        Aiming.SelectedPart = nil
+
+        return LocalPlayer
+    end
+
+    -- // Loop through all players
+    for _, Player in ipairs(GetPlayers(Players)) do
+        -- // Get Character
+        local Character = Aiming.Character(Player)
+
+        -- // Make sure isn't ignored and Character exists
+        if (Aiming.IsIgnored(Player) == false and Character) then
+            -- // Vars
+            local TargetPartTemp, _, _, Magnitude = Aiming.GetClosestTargetPartToCursor(Character)
+
+            -- // Check if part exists and health
+            if (TargetPartTemp and Aiming.CheckHealth(Player)) then
+                -- // Check if is in FOV
+                if (circle.Radius > Magnitude and Magnitude < ShortestDistance) then
+                    -- // Check if Visible
+                    if (Aiming.VisibleCheck and not Aiming.IsPartVisible(TargetPartTemp, Character)) then continue end
+
+                    -- // Set vars
+                    ClosestPlayer = Player
+                    ShortestDistance = Magnitude
+                    TargetPart = TargetPartTemp
                 end
             end
         end
     end
-    
-    return closestPlayer
+
+    -- // End
+    Aiming.Selected = ClosestPlayer
+    Aiming.SelectedPart = TargetPart
 end
 
-local function aimAtPlayer(player)
-    if not player then
-        return
-    end
-    
-    local targetPart = getTargetPart(player)
-    if not targetPart then
-        return
-    end
-    
-    local camera = Workspace.CurrentCamera
-    local targetPosition = targetPart.Position
-    
-    -- Predict target movement for DaHood physics
-    local targetVelocity = targetPart.AssemblyLinearVelocity or Vector3.new(0, 0, 0)
-    local distance = (targetPosition - camera.CFrame.Position).Magnitude
-    local timeToTarget = distance / 1000 -- Bullet travel time estimation
-    local predictedPosition = targetPosition + (targetVelocity * timeToTarget)
-    
-    -- Calculate aim position with smoothness
-    local targetCFrame = CFrame.lookAt(camera.CFrame.Position, predictedPosition)
-    local smoothedCFrame = camera.CFrame:Lerp(targetCFrame, aimbotSmoothness)
-    
-    camera.CFrame = smoothedCFrame
-end
-
--- Combat Tab
-local CombatTab = Window:CreateTab("Combat", 4483362458)
-
-local AimbotSection = CombatTab:CreateSection("Aimbot")
-
-local AimbotToggle = CombatTab:CreateToggle({
-   Name = "Enable Aimbot",
-   CurrentValue = false,
-   Flag = "AimbotToggle",
-   Callback = function(Value)
-      aimbotEnabled = Value
-      
-      if aimbotEnabled then
-         FOVCircle.Visible = true
-         
-         -- Main aimbot loop
-         aimbotConnection = RunService.Heartbeat:Connect(function()
-            if aimbotEnabled then
-               local camera = Workspace.CurrentCamera
-               local screenCenter = Vector2.new(camera.ViewportSize.X / 2, camera.ViewportSize.Y / 2)
-               FOVCircle.Position = screenCenter
-               FOVCircle.Radius = aimbotFOV
-               
-               if isAiming then
-                  if currentTarget and isPlayerValid(currentTarget) then
-                     local targetPart = getTargetPart(currentTarget)
-                     if targetPart and isVisible(targetPart) then
-                        local screenPos, onScreen = camera:WorldToViewportPoint(targetPart.Position)
-                        if onScreen then
-                           local distance = (Vector2.new(screenPos.X, screenPos.Y) - screenCenter).Magnitude
-                           if distance <= aimbotFOV then
-                              aimAtPlayer(currentTarget)
-                              
-                              -- Show target indicator
-                              TargetCircle.Position = Vector2.new(screenPos.X, screenPos.Y)
-                              TargetCircle.Visible = true
-                           else
-                              currentTarget = nil
-                              isAiming = false
-                              TargetCircle.Visible = false
-                           end
-                        else
-                           currentTarget = nil
-                           isAiming = false
-                           TargetCircle.Visible = false
-                        end
-                     else
-                        currentTarget = nil
-                        isAiming = false
-                        TargetCircle.Visible = false
-                     end
-                  else
-                     currentTarget = nil
-                     isAiming = false
-                     TargetCircle.Visible = false
-                  end
-               end
-            end
-         end)
-         
-         -- Aimbot key handler
-         aimbotKeyConnection = UserInputService.InputBegan:Connect(function(input, gameProcessed)
-            if gameProcessed then return end
-            
-            if input.KeyCode == aimbotKey and aimbotEnabled then
-               if not isAiming then
-                  currentTarget = getClosestPlayerInFOV()
-                  if currentTarget then
-                     isAiming = true
-                  end
-               end
-            end
-         end)
-         
-         -- Stop aiming when key released
-         UserInputService.InputEnded:Connect(function(input, gameProcessed)
-            if gameProcessed then return end
-            
-            if input.KeyCode == aimbotKey then
-               isAiming = false
-               currentTarget = nil
-               TargetCircle.Visible = false
-            end
-         end)
-         
-         Rayfield:Notify({
-            Title = "Aimbot Enabled",
-            Content = "Hold " .. aimbotKey.Name .. " to aim at closest player",
-            Duration = 6.5,
-            Image = 4483362458,
-            Actions = {
-               Ignore = {
-                  Name = "Okay!",
-                  Callback = function()
-                  end
-               },
-            },
-         })
-      else
-         FOVCircle.Visible = false
-         TargetCircle.Visible = false
-         isAiming = false
-         currentTarget = nil
-         
-         if aimbotConnection then
-            aimbotConnection:Disconnect()
-            aimbotConnection = nil
-         end
-         
-         if aimbotKeyConnection then
-            aimbotKeyConnection:Disconnect()
-            aimbotKeyConnection = nil
-         end
-      end
-   end,
-})
-
-local FOVSlider = CombatTab:CreateSlider({
-   Name = "Aimbot FOV",
-   Range = {50, 500},
-   Increment = 10,
-   CurrentValue = aimbotFOV,
-   Flag = "AimbotFOV",
-   Callback = function(Value)
-      aimbotFOV = Value
-      FOVCircle.Radius = Value
-   end,
-})
-
-local SmoothnessSlider = CombatTab:CreateSlider({
-   Name = "Aimbot Smoothness",
-   Range = {0.1, 1},
-   Increment = 0.05,
-   CurrentValue = aimbotSmoothness,
-   Flag = "AimbotSmoothness",
-   Callback = function(Value)
-      aimbotSmoothness = Value
-   end,
-})
-
-local AimbotKeyDropdown = CombatTab:CreateDropdown({
-   Name = "Aimbot Key",
-   Options = {"E", "Q", "F", "C", "X", "Z", "Mouse2"},
-   CurrentOption = {"E"},
-   MultipleOptions = false,
-   Flag = "AimbotKey",
-   Callback = function(Option)
-      local keyMap = {
-         ["E"] = Enum.KeyCode.E,
-         ["Q"] = Enum.KeyCode.Q,
-         ["F"] = Enum.KeyCode.F,
-         ["C"] = Enum.KeyCode.C,
-         ["X"] = Enum.KeyCode.X,
-         ["Z"] = Enum.KeyCode.Z,
-         ["Mouse2"] = Enum.UserInputType.MouseButton2
-      }
-      aimbotKey = keyMap[Option[1]] or Enum.KeyCode.E
-   end,
-})
-
-local TargetPartDropdown = CombatTab:CreateDropdown({
-   Name = "Target Body Part",
-   Options = {"Head", "HumanoidRootPart", "UpperTorso", "LowerTorso"},
-   CurrentOption = {"Head"},
-   MultipleOptions = false,
-   Flag = "TargetPart",
-   Callback = function(Option)
-      aimbotTargetPart = Option[1]
-   end,
-})
-
-local VisibleCheckToggle = CombatTab:CreateToggle({
-   Name = "Visible Check",
-   CurrentValue = false,
-   Flag = "VisibleCheck",
-   Callback = function(Value)
-      aimbotVisibleCheck = Value
-   end,
-})
-
-local TeamCheckToggle = CombatTab:CreateToggle({
-   Name = "Team Check",
-   CurrentValue = false,
-   Flag = "TeamCheck",
-   Callback = function(Value)
-      aimbotTeamCheck = Value
-   end,
-})
-
--- Visual Tab
-local VisualTab = Window:CreateTab("Visual", 4483362458)
-
-local ESPSection = VisualTab:CreateSection("ESP")
-
-local ESPToggle = VisualTab:CreateToggle({
-   Name = "Player ESP",
-   CurrentValue = false,
-   Flag = "ESPToggle",
-   Callback = function(Value)
-      espEnabled = Value
-      
-      if espEnabled then
-         -- Create ESP for existing players
-         for _, player in pairs(Players:GetPlayers()) do
-            if player ~= LocalPlayer and player.Character then
-               local highlight = Instance.new("Highlight")
-               highlight.Name = "PlayerESP"
-               highlight.Adornee = player.Character
-               highlight.FillColor = Color3.fromRGB(255, 0, 0)
-               highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
-               highlight.FillTransparency = 0.5
-               highlight.OutlineTransparency = 0
-               highlight.Parent = player.Character
-               espObjects[player] = highlight
-            end
-         end
-         
-         -- Handle new players
-         espConnection = Players.PlayerAdded:Connect(function(player)
-            if espEnabled then
-               player.CharacterAdded:Connect(function(character)
-                  wait(1)
-                  if espEnabled and character then
-                     local highlight = Instance.new("Highlight")
-                     highlight.Name = "PlayerESP"
-                     highlight.Adornee = character
-                     highlight.FillColor = Color3.fromRGB(255, 0, 0)
-                     highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
-                     highlight.FillTransparency = 0.5
-                     highlight.OutlineTransparency = 0
-                     highlight.Parent = character
-                     espObjects[player] = highlight
-                  end
-               end)
-            end
-         end)
-         
-         Rayfield:Notify({
-            Title = "ESP Enabled",
-            Content = "All players are now highlighted",
-            Duration = 6.5,
-            Image = 4483362458,
-            Actions = {
-               Ignore = {
-                  Name = "Okay!",
-                  Callback = function()
-                  end
-               },
-            },
-         })
-      else
-         -- Remove all ESP
-         for player, highlight in pairs(espObjects) do
-            if highlight then
-               highlight:Destroy()
-            end
-         end
-         espObjects = {}
-         
-         if espConnection then
-            espConnection:Disconnect()
-            espConnection = nil
-         end
-         
-         -- Clean up any remaining ESP
-         for _, player in pairs(Players:GetPlayers()) do
-            if player.Character then
-               local highlight = player.Character:FindFirstChild("PlayerESP")
-               if highlight then
-                  highlight:Destroy()
-               end
-            end
-         end
-      end
-   end,
-})
-
--- Movement Tab
-local MovementTab = Window:CreateTab("Movement", 4483362458)
-
-local FlyToggle = MovementTab:CreateToggle({
-   Name = "Fly",
-   CurrentValue = false,
-   Flag = "FlyToggle",
-   Callback = function(Value)
-      flyEnabled = Value
-      local character = LocalPlayer.Character
-      local humanoid = character and character:FindFirstChildOfClass("Humanoid")
-      local rootPart = character and character:FindFirstChild("HumanoidRootPart")
-      
-      if flyEnabled then
-         if character and humanoid and rootPart then
-            flyBodyVelocity = Instance.new("BodyVelocity")
-            flyBodyVelocity.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-            flyBodyVelocity.Velocity = Vector3.new(0, 0, 0)
-            flyBodyVelocity.Parent = rootPart
-            
-            flyBodyAngularVelocity = Instance.new("BodyAngularVelocity")
-            flyBodyAngularVelocity.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
-            flyBodyAngularVelocity.AngularVelocity = Vector3.new(0, 0, 0)
-            flyBodyAngularVelocity.Parent = rootPart
-            
-            flyConnection = RunService.Heartbeat:Connect(function()
-               if flyBodyVelocity and flyBodyVelocity.Parent then
-                  local moveVector = Vector3.new(0, 0, 0)
-                  local camera = Workspace.CurrentCamera
-                  local flySpeed = 50
-                  
-                  if UserInputService:IsKeyDown(Enum.KeyCode.W) then
-                     moveVector = moveVector + (camera.CFrame.LookVector * flySpeed)
-                  end
-                  if UserInputService:IsKeyDown(Enum.KeyCode.S) then
-                     moveVector = moveVector - (camera.CFrame.LookVector * flySpeed)
-                  end
-                  if UserInputService:IsKeyDown(Enum.KeyCode.A) then
-                     moveVector = moveVector - (camera.CFrame.RightVector * flySpeed)
-                  end
-                  if UserInputService:IsKeyDown(Enum.KeyCode.D) then
-                     moveVector = moveVector + (camera.CFrame.RightVector * flySpeed)
-                  end
-                  if UserInputService:IsKeyDown(Enum.KeyCode.Space) then
-                     moveVector = moveVector + Vector3.new(0, flySpeed, 0)
-                  end
-                  if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then
-                     moveVector = moveVector - Vector3.new(0, flySpeed, 0)
-                  end
-                  
-                  flyBodyVelocity.Velocity = moveVector
-               end
-            end)
-         end
-      else
-         if flyConnection then
-            flyConnection:Disconnect()
-            flyConnection = nil
-         end
-         if flyBodyVelocity then
-            flyBodyVelocity:Destroy()
-            flyBodyVelocity = nil
-         end
-         if flyBodyAngularVelocity then
-            flyBodyAngularVelocity:Destroy()
-            flyBodyAngularVelocity = nil
-         end
-      end
-   end,
-})
-
--- Misc Tab
-local MiscTab = Window:CreateTab("Misc", 4483362458)
-
-local InfiniteYieldButton = MiscTab:CreateButton({
-   Name = "Load Infinite Yield",
-   Callback = function()
-      loadstring(game:HttpGet('https://raw.githubusercontent.com/EdgeIY/infiniteyield/master/source'))()
-      Rayfield:Notify({
-         Title = "Infinite Yield Loaded",
-         Content = "Admin commands are now available",
-         Duration = 6.5,
-         Image = 4483362458,
-         Actions = {
-            Ignore = {
-               Name = "Okay!",
-               Callback = function()
-               end
-            },
-         },
-      })
-   end,
-})
-
-local DiscordButton = MiscTab:CreateButton({
-   Name = "Copy Discord Link",
-   Callback = function()
-      setclipboard("https://discord.gg/4F7rMQtGhe")
-      Rayfield:Notify({
-         Title = "Discord Link Copied",
-         Content = "discord.gg/4F7rMQtGhe has been copied to clipboard",
-         Duration = 6.5,
-         Image = 4483362458,
-         Actions = {
-            Ignore = {
-               Name = "Okay!",
-               Callback = function()
-               end
-            },
-         },
-      })
-   end,
-})
-
--- Character respawn handler
-LocalPlayer.CharacterAdded:Connect(function()
-   wait(2)
-   
-   -- Re-enable features that should persist
-   if espEnabled then
-      wait(1)
-      local character = LocalPlayer.Character
-      if character then
-         -- Re-create ESP for all players
-         for _, player in pairs(Players:GetPlayers()) do
-            if player ~= LocalPlayer and player.Character then
-               local highlight = Instance.new("Highlight")
-               highlight.Name = "PlayerESP"
-               highlight.Adornee = player.Character
-               highlight.FillColor = Color3.fromRGB(255, 0, 0)
-               highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
-               highlight.FillTransparency = 0.5
-               highlight.OutlineTransparency = 0
-               highlight.Parent = player.Character
-               espObjects[player] = highlight
-            end
-         end
-      end
-   end
+-- // Heartbeat Function
+Heartbeat:Connect(function()
+    Aiming.UpdateFOV()
+    Aiming.GetClosestPlayerToCursor()
 end)
 
--- Initial notification
-Rayfield:Notify({
-   Title = "Tux's DaHood Menu Loaded!",
-   Content = "All features are ready. Aimbot key: " .. aimbotKey.Name,
-   Duration = 6.5,
-   Image = 4483362458,
-   Actions = {
-      Ignore = {
-         Name = "Let's go!",
-         Callback = function()
-         end
-      },
-   },
-})
+-- //
+return Aiming
