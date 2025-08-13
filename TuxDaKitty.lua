@@ -96,10 +96,18 @@ local espObjects = {}
 -- Combat variables
 local aimbotEnabled = false
 local aimbotFOV = 100
+local silentAimEnabled = false
+local aimbotShowFOV = false
+local aimbotSmoothness = 1
 local killAuraEnabled = false
 local autoClickerEnabled = false
 local clickSpeed = 10
 local lastClick = 0
+local aimbotCircle = nil
+
+-- UI variables
+local rainbowUI = false
+local rainbowHue = 0
 
 -- Misc variables
 local antiAfkEnabled = false
@@ -286,7 +294,7 @@ local function isKeyDown(key)
     return UserInputService:IsKeyDown(key)
 end
 
--- Universal mouse click
+-- Universal mouse click with high CPS support
 local function performClick()
     local currentTime = tick()
     if currentTime - lastClick < (1 / clickSpeed) then
@@ -297,14 +305,155 @@ local function performClick()
     pcall(function()
         if mouse1click then
             mouse1click()
-        elseif Mouse.Button1Click then
-            Mouse.Button1Click:Fire()
+        elseif mouse1press and mouse1release then
+            mouse1press()
+            task.wait()
+            mouse1release()
+        elseif Mouse and Mouse.Button1Down and Mouse.Button1Up then
+            Mouse.Button1Down:Fire()
+            task.wait()
+            Mouse.Button1Up:Fire()
         elseif VirtualInputManager then
             VirtualInputManager:SendMouseButtonEvent(Mouse.X, Mouse.Y, 0, true, game, false)
-            wait()
             VirtualInputManager:SendMouseButtonEvent(Mouse.X, Mouse.Y, 0, false, game, false)
         end
     end)
+end
+
+-- Create FOV Circle for aimbot
+local function createFOVCircle()
+    if not Drawing then return nil end
+    
+    local circle = Drawing.new("Circle")
+    circle.Transparency = 0.7
+    circle.Thickness = 2
+    circle.Color = Color3.fromRGB(255, 255, 255)
+    circle.Filled = false
+    circle.Radius = aimbotFOV
+    circle.Position = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
+    return circle
+end
+
+-- Update FOV Circle
+local function updateFOVCircle()
+    if aimbotCircle and Drawing then
+        aimbotCircle.Radius = aimbotFOV
+        aimbotCircle.Position = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
+        aimbotCircle.Visible = aimbotShowFOV and (aimbotEnabled or silentAimEnabled)
+        
+        if rainbowUI then
+            aimbotCircle.Color = Color3.fromHSV(rainbowHue, 1, 1)
+        end
+    end
+end
+
+-- Advanced aimbot target detection with bone targeting
+local function getAimbotTarget()
+    local closestPlayer = nil
+    local shortestDistance = math.huge
+    local myRootPart = getRootPart()
+    
+    if not myRootPart or not Camera then return nil end
+    
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and isAlive(player) then
+            local character = getCharacter(player, 1)
+            if character then
+                -- Try different target parts (head priority for DaHood)
+                local targetParts = {"Head", "UpperTorso", "Torso", "HumanoidRootPart"}
+                
+                for _, partName in ipairs(targetParts) do
+                    local targetPart = character:FindFirstChild(partName)
+                    if targetPart then
+                        local screenPos, onScreen = Camera:WorldToScreenPoint(targetPart.Position)
+                        
+                        if onScreen then
+                            local mousePos = Vector2.new(Mouse.X, Mouse.Y)
+                            local targetPos2D = Vector2.new(screenPos.X, screenPos.Y)
+                            local distance2D = (targetPos2D - mousePos).Magnitude
+                            
+                            -- Check if within FOV circle
+                            if distance2D <= aimbotFOV then
+                                -- Team check
+                                if teamCheckEnabled and player.Team == LocalPlayer.Team then
+                                    continue
+                                end
+                                
+                                -- Visibility check with raycast
+                                local rayOrigin = myRootPart.Position
+                                local rayDirection = (targetPart.Position - rayOrigin).Unit * 1000
+                                
+                                local raycastParams = RaycastParams.new()
+                                raycastParams.FilterType = Enum.RaycastFilterType.Blacklist
+                                raycastParams.FilterDescendantsInstances = {getCharacter()}
+                                
+                                local raycast = Workspace:Raycast(rayOrigin, rayDirection, raycastParams)
+                                
+                                if not raycast or raycast.Instance:IsDescendantOf(character) then
+                                    if distance2D < shortestDistance then
+                                        shortestDistance = distance2D
+                                        closestPlayer = {player = player, part = targetPart}
+                                    end
+                                end
+                            end
+                        end
+                        break -- Found a valid part, move to next player
+                    end
+                end
+            end
+        end
+    end
+    
+    return closestPlayer
+end
+
+-- DaHood Silent Aim Hook
+local function setupSilentAim()
+    if not silentAimEnabled then return end
+    
+    local oldNamecall
+    oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
+        local method = getnamecallmethod()
+        local args = {...}
+        
+        if silentAimEnabled and method == "FireServer" then
+            -- DaHood specific remote detection
+            if self.Name == "MainEvent" or self.Name == "MAINEVENT" or self.Name == "RemoteEvent" then
+                local target = getAimbotTarget()
+                if target and target.part then
+                    -- Modify the bullet trajectory for DaHood
+                    if args[1] == "UpdateMousePos" or args[1] == "MousePos" then
+                        args[2] = target.part.Position
+                    elseif args[1] == "Bullets" or args[1] == "Gun" then
+                        -- Modify bullet hit position
+                        if args[2] and args[2].Hit then
+                            args[2].Hit = target.part.Position
+                        end
+                        if args[3] and typeof(args[3]) == "Vector3" then
+                            args[3] = target.part.Position
+                        end
+                    end
+                end
+            end
+        end
+        
+        return oldNamecall(self, unpack(args))
+    end)
+end
+
+-- Rainbow UI effect
+local function updateRainbowUI()
+    if rainbowUI then
+        rainbowHue = rainbowHue + 0.01
+        if rainbowHue > 1 then rainbowHue = 0 end
+        
+        -- Update window accent color if supported
+        pcall(function()
+            if Window and Window.Accent then
+                Window.Accent = Color3.fromHSV(rainbowHue, 1, 1)
+            end
+        end)
+    end
 end
 
 -- ╔═══════════════════════════════════════════════════════════════════════╗
@@ -771,20 +920,54 @@ VisualTab:CreateToggle({
 
 local CombatTab = Window:CreateTab("⚔️ Combat", 4335454746)
 
--- Aimbot FOV
+-- Aimbot FOV Circle Toggle
+CombatTab:CreateToggle({
+    Name = "👁️ Show FOV Circle",
+    CurrentValue = false,
+    Flag = "show_fov_circle",
+    Callback = function(Value)
+        aimbotShowFOV = Value
+        
+        if Value and Drawing then
+            if not aimbotCircle then
+                aimbotCircle = createFOVCircle()
+            end
+        elseif aimbotCircle then
+            aimbotCircle.Visible = false
+        end
+        
+        notify("👁️ FOV Circle", Value and "Enabled" or "Disabled", 2)
+    end
+})
+
+-- Aimbot FOV Slider
 CombatTab:CreateSlider({
     Name = "Aimbot FOV",
-    Range = {10, 360},
+    Range = {10, 500},
     Increment = 1,
-    Suffix = "°",
+    Suffix = " pixels",
     CurrentValue = 100,
     Flag = "aimbot_fov",
     Callback = function(Value)
         aimbotFOV = Value
+        updateFOVCircle()
     end
 })
 
--- Aimbot
+-- Aimbot Smoothness
+CombatTab:CreateSlider({
+    Name = "Aimbot Smoothness",
+    Range = {0.1, 5},
+    Increment = 0.1,
+    Suffix = "x",
+    CurrentValue = 1,
+    Flag = "aimbot_smoothness",
+    Callback = function(Value)
+        aimbotSmoothness = Value
+    end
+})
+
+-- Universal Aimbot
 CombatTab:CreateToggle({
     Name = "🎯 Universal Aimbot",
     CurrentValue = false,
@@ -794,33 +977,81 @@ CombatTab:CreateToggle({
         cleanupConnection("aimbot")
         
         if Value then
+            -- Create FOV circle if enabled
+            if aimbotShowFOV and Drawing and not aimbotCircle then
+                aimbotCircle = createFOVCircle()
+            end
+            
             connections["aimbot"] = RunService.Heartbeat:Connect(function()
-                local target, distance = getClosestPlayer(aimbotFOV)
-                if target and distance then
-                    local targetChar = getCharacter(target, 1)
-                    if targetChar then
-                        local targetHead = targetChar:FindFirstChild("Head")
-                        if targetHead and Camera then
-                            pcall(function()
-                                local lookDirection = (targetHead.Position - Camera.CFrame.Position).Unit
-                                Camera.CFrame = CFrame.lookAt(Camera.CFrame.Position, targetHead.Position)
-                            end)
+                updateFOVCircle()
+                
+                local target = getAimbotTarget()
+                if target and target.part and Camera then
+                    pcall(function()
+                        local currentCFrame = Camera.CFrame
+                        local targetPosition = target.part.Position
+                        
+                        -- Smooth aiming
+                        local lookDirection = (targetPosition - currentCFrame.Position).Unit
+                        local newCFrame = CFrame.lookAt(currentCFrame.Position, targetPosition)
+                        
+                        -- Apply smoothness
+                        if aimbotSmoothness > 0.1 then
+                            Camera.CFrame = currentCFrame:Lerp(newCFrame, 1 / aimbotSmoothness)
+                        else
+                            Camera.CFrame = newCFrame
                         end
-                    end
+                    end)
                 end
             end)
             activeConnections = activeConnections + 1
             notify("✅ Aimbot", "Universal aimbot enabled!", 2)
         else
+            if aimbotCircle then
+                aimbotCircle.Visible = false
+            end
             notify("❌ Aimbot", "Universal aimbot disabled!", 2)
         end
     end
 })
 
--- Auto clicker speed
+-- DaHood Silent Aim
+CombatTab:CreateToggle({
+    Name = "🔇 Silent Aim (DaHood)",
+    CurrentValue = false,
+    Flag = "silent_aim_toggle",
+    Callback = function(Value)
+        silentAimEnabled = Value
+        
+        if Value then
+            -- Create FOV circle if enabled
+            if aimbotShowFOV and Drawing and not aimbotCircle then
+                aimbotCircle = createFOVCircle()
+            end
+            
+            -- Setup silent aim hook
+            setupSilentAim()
+            
+            connections["silent_aim_visual"] = RunService.Heartbeat:Connect(function()
+                updateFOVCircle()
+            end)
+            
+            activeConnections = activeConnections + 1
+            notify("✅ Silent Aim", "DaHood silent aim enabled!", 2)
+        else
+            if aimbotCircle then
+                aimbotCircle.Visible = false
+            end
+            cleanupConnection("silent_aim_visual")
+            notify("❌ Silent Aim", "DaHood silent aim disabled!", 2)
+        end
+    end
+})
+
+-- Auto clicker speed with higher range
 CombatTab:CreateSlider({
     Name = "Auto Click Speed",
-    Range = {1, 20},
+    Range = {1, 500},
     Increment = 1,
     Suffix = " cps",
     CurrentValue = 10,
@@ -830,9 +1061,9 @@ CombatTab:CreateSlider({
     end
 })
 
--- Auto clicker
+-- Enhanced Auto clicker
 CombatTab:CreateToggle({
-    Name = "🖱️ Auto Clicker",
+    Name = "🖱️ Enhanced Auto Clicker",
     CurrentValue = false,
     Flag = "auto_clicker",
     Callback = function(Value)
@@ -840,15 +1071,50 @@ CombatTab:CreateToggle({
         cleanupConnection("auto_clicker")
         
         if Value then
-            connections["auto_clicker"] = RunService.Heartbeat:Connect(function()
-                if autoClickerEnabled then
+            -- High-performance clicking for high CPS
+            if clickSpeed > 50 then
+                connections["auto_clicker"] = RunService.Heartbeat:Connect(function()
+                    if autoClickerEnabled then
+                        performClick()
+                    end
+                end)
+            else
+                connections["auto_clicker"] = task.spawn(function()
+                    while autoClickerEnabled do
+                        performClick()
+                        task.wait(1 / clickSpeed)
+                    end
+                end)
+            end
+            
+            activeConnections = activeConnections + 1
+            notify("✅ Auto Click", "Enhanced auto clicker enabled! (" .. clickSpeed .. " CPS)", 2)
+        else
+            notify("❌ Auto Click", "Enhanced auto clicker disabled!", 2)
+        end
+    end
+})
+
+-- Kill Aura
+CombatTab:CreateToggle({
+    Name = "⚔️ Kill Aura",
+    CurrentValue = false,
+    Flag = "kill_aura",
+    Callback = function(Value)
+        killAuraEnabled = Value
+        cleanupConnection("kill_aura")
+        
+        if Value then
+            connections["kill_aura"] = RunService.Heartbeat:Connect(function()
+                local target = getAimbotTarget()
+                if target and target.part then
                     performClick()
                 end
             end)
             activeConnections = activeConnections + 1
-            notify("✅ Auto Click", "Auto clicker enabled!", 2)
+            notify("✅ Kill Aura", "Kill aura enabled!", 2)
         else
-            notify("❌ Auto Click", "Auto clicker disabled!", 2)
+            notify("❌ Kill Aura", "Kill aura disabled!", 2)
         end
     end
 })
