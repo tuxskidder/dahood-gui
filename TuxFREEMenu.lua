@@ -1,8 +1,8 @@
 -- ╔═══════════════════════════════════════════════════════════════════════╗
--- ║                         TUX'S FREE ADMIN PANEL                        ║
+-- ║                        TUX'S FREE KEYLESS M3NU                        ║
 -- ║                             ADMIN PANEL                               ║
 -- ║                            Version 1.9.5.                             ║
--- ║                          Made by Tux Da Dev                           ║
+-- ║                         Made by Tux Da Modder                         ║
 -- ╚═══════════════════════════════════════════════════════════════════════╝
 
 -- Import Rayfield UI library with error handling
