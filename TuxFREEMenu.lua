@@ -1,8 +1,8 @@
 -- ╔═══════════════════════════════════════════════════════════════════════╗
--- ║                          TUX'S FREE MENU                              ║
--- ║                    Advanced Roblox Script Hub                         ║
--- ║                         Version 1.9.5.                                ║
--- ║                      Made by Tux Da Modda                             ║
+-- ║                         TUX'S FREE ADMIN PANEL                        ║
+-- ║                             ADMIN PANEL                               ║
+-- ║                            Version 1.9.5.                             ║
+-- ║                          Made by Tux Da Dev                           ║
 -- ╚═══════════════════════════════════════════════════════════════════════╝
 
 -- Import Rayfield UI library with error handling
