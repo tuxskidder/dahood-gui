@@ -1,13 +1,13 @@
 -- ╔═══════════════════════════════════════════════════════════════════════╗
 -- ║                          TUX'S FREE MENU                             ║
 -- ║                    Universal Mobile & PC Compatible                   ║
--- ║                         Version 3.0.1 - Fixed                       ║
+-- ║                         Version 3.0.2 - RGB EDITION                 ║
 -- ║          Works with Xeno, Delta, Fluxus, Arceus X & More            ║
 -- ╚═══════════════════════════════════════════════════════════════════════╝
 
 -- Universal executor compatibility check
 local executor = identifyexecutor and identifyexecutor() or "Unknown"
-warn("🚀 Loading Tux's FREE Menu on: " .. executor)
+warn("🚀 Loading Tux's FREE Menu RGB Edition on: " .. executor)
 
 -- Safe service loading with fallbacks
 local function getService(name)
@@ -93,26 +93,25 @@ local fullbrightEnabled = false
 local teamCheckEnabled = true
 local espObjects = {}
 
+-- RGB UI Variables
+local rgbEnabled = false
+local rgbSpeed = 1
+local rgbHue = 0
+local rgbBrightness = 1
+local rgbSaturation = 1
+
 -- Combat variables
 local aimbotEnabled = false
 local aimbotFOV = 100
-local silentAimEnabled = false
-local aimbotShowFOV = false
-local aimbotSmoothness = 1
 local killAuraEnabled = false
 local autoClickerEnabled = false
 local clickSpeed = 10
 local lastClick = 0
-local aimbotCircle = nil
-
--- UI variables
-local rainbowUI = false
-local rainbowHue = 0
 
 -- Misc variables
 local antiAfkEnabled = false
 local chatSpamEnabled = false
-local spamMessage = "Tux's FREE Menu is the best!"
+local spamMessage = "Tux's FREE Menu RGB Edition is amazing!"
 local spamDelay = 1
 
 -- Performance tracking
@@ -294,7 +293,7 @@ local function isKeyDown(key)
     return UserInputService:IsKeyDown(key)
 end
 
--- Universal mouse click with high CPS support
+-- Universal mouse click
 local function performClick()
     local currentTime = tick()
     if currentTime - lastClick < (1 / clickSpeed) then
@@ -305,155 +304,83 @@ local function performClick()
     pcall(function()
         if mouse1click then
             mouse1click()
-        elseif mouse1press and mouse1release then
-            mouse1press()
-            task.wait()
-            mouse1release()
-        elseif Mouse and Mouse.Button1Down and Mouse.Button1Up then
-            Mouse.Button1Down:Fire()
-            task.wait()
-            Mouse.Button1Up:Fire()
+        elseif Mouse.Button1Click then
+            Mouse.Button1Click:Fire()
         elseif VirtualInputManager then
             VirtualInputManager:SendMouseButtonEvent(Mouse.X, Mouse.Y, 0, true, game, false)
+            wait()
             VirtualInputManager:SendMouseButtonEvent(Mouse.X, Mouse.Y, 0, false, game, false)
         end
     end)
 end
 
--- Create FOV Circle for aimbot
-local function createFOVCircle()
-    if not Drawing then return nil end
-    
-    local circle = Drawing.new("Circle")
-    circle.Transparency = 0.7
-    circle.Thickness = 2
-    circle.Color = Color3.fromRGB(255, 255, 255)
-    circle.Filled = false
-    circle.Radius = aimbotFOV
-    circle.Position = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
-    return circle
-end
+-- ╔═══════════════════════════════════════════════════════════════════════╗
+-- ║                    RGB UI FUNCTIONS                                   ║
+-- ╚═══════════════════════════════════════════════════════════════════════╝
 
--- Update FOV Circle
-local function updateFOVCircle()
-    if aimbotCircle and Drawing then
-        aimbotCircle.Radius = aimbotFOV
-        aimbotCircle.Position = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
-        aimbotCircle.Visible = aimbotShowFOV and (aimbotEnabled or silentAimEnabled)
-        
-        if rainbowUI then
-            aimbotCircle.Color = Color3.fromHSV(rainbowHue, 1, 1)
-        end
-    end
-end
-
--- Advanced aimbot target detection with bone targeting
-local function getAimbotTarget()
-    local closestPlayer = nil
-    local shortestDistance = math.huge
-    local myRootPart = getRootPart()
+local function applyRGBToElement(element, color)
+    if not element then return end
     
-    if not myRootPart or not Camera then return nil end
-    
-    for _, player in pairs(Players:GetPlayers()) do
-        if player ~= LocalPlayer and isAlive(player) then
-            local character = getCharacter(player, 1)
-            if character then
-                -- Try different target parts (head priority for DaHood)
-                local targetParts = {"Head", "UpperTorso", "Torso", "HumanoidRootPart"}
-                
-                for _, partName in ipairs(targetParts) do
-                    local targetPart = character:FindFirstChild(partName)
-                    if targetPart then
-                        local screenPos, onScreen = Camera:WorldToScreenPoint(targetPart.Position)
-                        
-                        if onScreen then
-                            local mousePos = Vector2.new(Mouse.X, Mouse.Y)
-                            local targetPos2D = Vector2.new(screenPos.X, screenPos.Y)
-                            local distance2D = (targetPos2D - mousePos).Magnitude
-                            
-                            -- Check if within FOV circle
-                            if distance2D <= aimbotFOV then
-                                -- Team check
-                                if teamCheckEnabled and player.Team == LocalPlayer.Team then
-                                    continue
-                                end
-                                
-                                -- Visibility check with raycast
-                                local rayOrigin = myRootPart.Position
-                                local rayDirection = (targetPart.Position - rayOrigin).Unit * 1000
-                                
-                                local raycastParams = RaycastParams.new()
-                                raycastParams.FilterType = Enum.RaycastFilterType.Blacklist
-                                raycastParams.FilterDescendantsInstances = {getCharacter()}
-                                
-                                local raycast = Workspace:Raycast(rayOrigin, rayDirection, raycastParams)
-                                
-                                if not raycast or raycast.Instance:IsDescendantOf(character) then
-                                    if distance2D < shortestDistance then
-                                        shortestDistance = distance2D
-                                        closestPlayer = {player = player, part = targetPart}
-                                    end
-                                end
-                            end
-                        end
-                        break -- Found a valid part, move to next player
-                    end
-                end
-            end
-        end
-    end
-    
-    return closestPlayer
-end
-
--- DaHood Silent Aim Hook
-local function setupSilentAim()
-    if not silentAimEnabled then return end
-    
-    local oldNamecall
-    oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
-        local method = getnamecallmethod()
-        local args = {...}
-        
-        if silentAimEnabled and method == "FireServer" then
-            -- DaHood specific remote detection
-            if self.Name == "MainEvent" or self.Name == "MAINEVENT" or self.Name == "RemoteEvent" then
-                local target = getAimbotTarget()
-                if target and target.part then
-                    -- Modify the bullet trajectory for DaHood
-                    if args[1] == "UpdateMousePos" or args[1] == "MousePos" then
-                        args[2] = target.part.Position
-                    elseif args[1] == "Bullets" or args[1] == "Gun" then
-                        -- Modify bullet hit position
-                        if args[2] and args[2].Hit then
-                            args[2].Hit = target.part.Position
-                        end
-                        if args[3] and typeof(args[3]) == "Vector3" then
-                            args[3] = target.part.Position
-                        end
-                    end
-                end
+    pcall(function()
+        -- Apply to frames and backgrounds
+        if element:IsA("Frame") or element:IsA("ScrollingFrame") then
+            if element.Name:find("Main") or element.Name:find("Background") or element.Name:find("Tab") then
+                element.BackgroundColor3 = color
             end
         end
         
-        return oldNamecall(self, unpack(args))
+        -- Apply to text elements with rainbow effect
+        if element:IsA("TextLabel") or element:IsA("TextButton") then
+            if element.Name:find("Title") or element.Name:find("Tab") then
+                element.BackgroundColor3 = color
+                -- Create contrasting text color
+                local brightness = (color.R + color.G + color.B) / 3
+                element.TextColor3 = brightness > 0.5 and Color3.new(0.1, 0.1, 0.1) or Color3.new(0.9, 0.9, 0.9)
+            end
+        end
+        
+        -- Apply to image labels and buttons
+        if element:IsA("ImageLabel") or element:IsA("ImageButton") then
+            element.ImageColor3 = color
+        end
+        
+        -- Apply border colors
+        if element.BorderColor3 then
+            element.BorderColor3 = color
+        end
+        
+        -- Apply stroke colors if available
+        if element:FindFirstChild("UIStroke") then
+            element.UIStroke.Color = color
+        end
     end)
 end
 
--- Rainbow UI effect
-local function updateRainbowUI()
-    if rainbowUI then
-        rainbowHue = rainbowHue + 0.01
-        if rainbowHue > 1 then rainbowHue = 0 end
+local function updateRGBUI()
+    if not rgbEnabled then return end
+    
+    -- Calculate current RGB color
+    local color = Color3.fromHSV(rgbHue, rgbSaturation, rgbBrightness)
+    
+    pcall(function()
+        local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
+        if not playerGui then return end
         
-        -- Update window accent color if supported
-        pcall(function()
-            if Window and Window.Accent then
-                Window.Accent = Color3.fromHSV(rainbowHue, 1, 1)
+        -- Find Rayfield GUI
+        for _, gui in pairs(playerGui:GetChildren()) do
+            if gui.Name:find("Rayfield") or gui.Name:find("UI") then
+                -- Apply RGB recursively to all elements
+                local function applyRGBRecursive(parent)
+                    applyRGBToElement(parent, color)
+                    for _, child in pairs(parent:GetChildren()) do
+                        applyRGBRecursive(child)
+                    end
+                end
+                
+                applyRGBRecursive(gui)
             end
-        end)
-    end
+        end
+    end)
 end
 
 -- ╔═══════════════════════════════════════════════════════════════════════╗
@@ -461,13 +388,13 @@ end
 -- ╚═══════════════════════════════════════════════════════════════════════╝
 
 local Window = Rayfield:CreateWindow({
-    Name = "Tux's FREE Menu - Universal",
-    LoadingTitle = "Loading Universal Menu...",
+    Name = "Tux's FREE Menu - RGB Edition",
+    LoadingTitle = "Loading RGB Universal Menu...",
     LoadingSubtitle = "Compatible with " .. executor .. " | Mobile & PC Ready",
     ConfigurationSaving = {
         Enabled = true,
-        FolderName = "TuxUniversalMenu",
-        FileName = "UniversalConfig"
+        FolderName = "TuxUniversalMenuRGB",
+        FileName = "UniversalRGBConfig"
     },
     Discord = {
         Enabled = true,
@@ -482,7 +409,7 @@ local Window = Rayfield:CreateWindow({
 
 local HomeTab = Window:CreateTab("🏠 Home", 4483362458)
 
-HomeTab:CreateLabel("🎉 Tux's FREE Menu - Universal Edition")
+HomeTab:CreateLabel("🌈 Tux's FREE Menu - RGB Edition")
 HomeTab:CreateLabel("📱 " .. (isMobile and "Mobile" or "PC") .. " Mode | Executor: " .. executor)
 HomeTab:CreateLabel("👨‍💻 Created by Tux Skidder")
 
@@ -602,7 +529,560 @@ MovementTab:CreateToggle({
         
         if Value then
             if not rootPart then
-                notify("❌ Error", "Character not found! Try respawning.", 3)
+                notify("❌ Aimbot", "Universal aimbot disabled!", 2)
+        end
+    end
+})
+
+-- Auto clicker speed
+CombatTab:CreateSlider({
+    Name = "Auto Click Speed",
+    Range = {1, 20},
+    Increment = 1,
+    Suffix = " cps",
+    CurrentValue = 10,
+    Flag = "click_speed",
+    Callback = function(Value)
+        clickSpeed = Value
+    end
+})
+
+-- Auto clicker
+CombatTab:CreateToggle({
+    Name = "🖱️ Auto Clicker",
+    CurrentValue = false,
+    Flag = "auto_clicker",
+    Callback = function(Value)
+        autoClickerEnabled = Value
+        cleanupConnection("auto_clicker")
+        
+        if Value then
+            connections["auto_clicker"] = RunService.Heartbeat:Connect(function()
+                if autoClickerEnabled then
+                    performClick()
+                end
+            end)
+            activeConnections = activeConnections + 1
+            notify("✅ Auto Click", "Auto clicker enabled!", 2)
+        else
+            notify("❌ Auto Click", "Auto clicker disabled!", 2)
+        end
+    end
+})
+
+-- ╔═══════════════════════════════════════════════════════════════════════╗
+-- ║                      MISCELLANEOUS TAB                                ║
+-- ╚═══════════════════════════════════════════════════════════════════════╝
+
+local MiscTab = Window:CreateTab("🔧 Misc", 4335486884)
+
+-- Anti AFK
+MiscTab:CreateToggle({
+    Name = "😴 Anti AFK",
+    CurrentValue = false,
+    Flag = "anti_afk",
+    Callback = function(Value)
+        antiAfkEnabled = Value
+        cleanupConnection("anti_afk")
+        
+        if Value then
+            connections["anti_afk"] = LocalPlayer.Idled:Connect(function()
+                pcall(function()
+                    VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.LeftShift, false, game)
+                    wait(0.1)
+                    VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.LeftShift, false, game)
+                end)
+            end)
+            activeConnections = activeConnections + 1
+            notify("✅ Anti AFK", "Anti AFK enabled!", 2)
+        else
+            notify("❌ Anti AFK", "Anti AFK disabled!", 2)
+        end
+    end
+})
+
+-- Chat spam message
+MiscTab:CreateInput({
+    Name = "Chat Message",
+    PlaceholderText = "Enter message to spam...",
+    RemoveTextAfterFocusLost = false,
+    Callback = function(Text)
+        spamMessage = Text
+    end
+})
+
+-- Chat spam delay
+MiscTab:CreateSlider({
+    Name = "Spam Delay",
+    Range = {0.5, 10},
+    Increment = 0.1,
+    Suffix = "s",
+    CurrentValue = 1,
+    Flag = "spam_delay",
+    Callback = function(Value)
+        spamDelay = Value
+    end
+})
+
+-- Chat spam toggle
+MiscTab:CreateToggle({
+    Name = "💬 Chat Spam",
+    CurrentValue = false,
+    Flag = "chat_spam",
+    Callback = function(Value)
+        chatSpamEnabled = Value
+        cleanupConnection("chat_spam")
+        
+        if Value then
+            connections["chat_spam"] = task.spawn(function()
+                while chatSpamEnabled do
+                    pcall(function()
+                        -- Try multiple chat methods for compatibility
+                        if ReplicatedStorage:FindFirstChild("DefaultChatSystemChatEvents") then
+                            local chatEvents = ReplicatedStorage.DefaultChatSystemChatEvents
+                            if chatEvents:FindFirstChild("SayMessageRequest") then
+                                chatEvents.SayMessageRequest:FireServer(spamMessage, "All")
+                            end
+                        elseif game:GetService("TextChatService") then
+                            local textChatService = game:GetService("TextChatService")
+                            if textChatService.TextChannels and textChatService.TextChannels.RBXGeneral then
+                                textChatService.TextChannels.RBXGeneral:SendAsync(spamMessage)
+                            end
+                        end
+                    end)
+                    wait(spamDelay)
+                end
+            end)
+            activeConnections = activeConnections + 1
+            notify("✅ Chat Spam", "Chat spam enabled!", 2)
+        else
+            notify("❌ Chat Spam", "Chat spam disabled!", 2)
+        end
+    end
+})
+
+-- Reset character
+MiscTab:CreateButton({
+    Name = "💀 Reset Character",
+    Callback = function()
+        pcall(function()
+            local humanoid = getHumanoid()
+            if humanoid then
+                humanoid.Health = 0
+                notify("💀 Reset", "Character reset!", 2)
+            end
+        end)
+    end
+})
+
+-- Respawn character
+MiscTab:CreateButton({
+    Name = "🔄 Respawn",
+    Callback = function()
+        pcall(function()
+            LocalPlayer:LoadCharacter()
+            notify("🔄 Respawn", "Character respawned!", 2)
+        end)
+    end
+})
+
+-- ╔═══════════════════════════════════════════════════════════════════════╗
+-- ║                         RGB SETTINGS TAB                              ║
+-- ╚═══════════════════════════════════════════════════════════════════════╝
+
+local RGBTab = Window:CreateTab("🌈 RGB UI", 4483362458)
+
+RGBTab:CreateLabel("🌈 RGB UI Customization")
+RGBTab:CreateLabel("Transform your UI with rainbow colors!")
+
+-- RGB UI Toggle
+RGBTab:CreateToggle({
+    Name = "🌈 Enable RGB UI",
+    CurrentValue = false,
+    Flag = "rgb_ui_toggle",
+    Callback = function(Value)
+        rgbEnabled = Value
+        cleanupConnection("rgb_ui")
+        
+        if Value then
+            connections["rgb_ui"] = RunService.Heartbeat:Connect(function()
+                if not rgbEnabled then return end
+                
+                -- Update hue for rainbow effect
+                rgbHue = (rgbHue + (rgbSpeed * 0.01)) % 1
+                updateRGBUI()
+            end)
+            activeConnections = activeConnections + 1
+            notify("🌈 RGB UI", "Rainbow UI mode enabled! Enjoy the show!", 3)
+        else
+            notify("❌ RGB UI", "Rainbow UI mode disabled!", 2)
+        end
+    end
+})
+
+-- RGB Speed Slider
+RGBTab:CreateSlider({
+    Name = "🌈 RGB Speed",
+    Range = {0.1, 5},
+    Increment = 0.1,
+    Suffix = "x",
+    CurrentValue = 1,
+    Flag = "rgb_speed",
+    Callback = function(Value)
+        rgbSpeed = Value
+    end
+})
+
+-- RGB Brightness Slider
+RGBTab:CreateSlider({
+    Name = "🔆 RGB Brightness",
+    Range = {0.1, 1},
+    Increment = 0.1,
+    Suffix = "",
+    CurrentValue = 1,
+    Flag = "rgb_brightness",
+    Callback = function(Value)
+        rgbBrightness = Value
+    end
+})
+
+-- RGB Saturation Slider
+RGBTab:CreateSlider({
+    Name = "🎨 RGB Saturation",
+    Range = {0.1, 1},
+    Increment = 0.1,
+    Suffix = "",
+    CurrentValue = 1,
+    Flag = "rgb_saturation",
+    Callback = function(Value)
+        rgbSaturation = Value
+    end
+})
+
+-- RGB Color Preset Section
+RGBTab:CreateSection("🎨 Color Presets")
+
+RGBTab:CreateButton({
+    Name = "🔴 Red Theme",
+    Callback = function()
+        if rgbEnabled then
+            rgbHue = 0 -- Red
+            notify("🔴 Red", "UI theme set to red!", 2)
+        else
+            notify("❌ Enable RGB", "Enable RGB UI first!", 2)
+        end
+    end
+})
+
+RGBTab:CreateButton({
+    Name = "🟢 Green Theme", 
+    Callback = function()
+        if rgbEnabled then
+            rgbHue = 0.33 -- Green
+            notify("🟢 Green", "UI theme set to green!", 2)
+        else
+            notify("❌ Enable RGB", "Enable RGB UI first!", 2)
+        end
+    end
+})
+
+RGBTab:CreateButton({
+    Name = "🔵 Blue Theme",
+    Callback = function()
+        if rgbEnabled then
+            rgbHue = 0.66 -- Blue
+            notify("🔵 Blue", "UI theme set to blue!", 2)
+        else
+            notify("❌ Enable RGB", "Enable RGB UI first!", 2)
+        end
+    end
+})
+
+RGBTab:CreateButton({
+    Name = "🟣 Purple Theme",
+    Callback = function()
+        if rgbEnabled then
+            rgbHue = 0.83 -- Purple
+            notify("🟣 Purple", "UI theme set to purple!", 2)
+        else
+            notify("❌ Enable RGB", "Enable RGB UI first!", 2)
+        end
+    end
+})
+
+RGBTab:CreateButton({
+    Name = "🟡 Gold Theme",
+    Callback = function()
+        if rgbEnabled then
+            rgbHue = 0.16 -- Gold/Yellow
+            notify("🟡 Gold", "UI theme set to gold!", 2)
+        else
+            notify("❌ Enable RGB", "Enable RGB UI first!", 2)
+        end
+    end
+})
+
+RGBTab:CreateButton({
+    Name = "🟠 Orange Theme",
+    Callback = function()
+        if rgbEnabled then
+            rgbHue = 0.08 -- Orange
+            notify("🟠 Orange", "UI theme set to orange!", 2)
+        else
+            notify("❌ Enable RGB", "Enable RGB UI first!", 2)
+        end
+    end
+})
+
+-- RGB Effects Section
+RGBTab:CreateSection("✨ Special Effects")
+
+RGBTab:CreateButton({
+    Name = "⚡ Lightning Effect",
+    Callback = function()
+        if rgbEnabled then
+            -- Create lightning effect by rapidly changing colors
+            spawn(function()
+                local originalSpeed = rgbSpeed
+                for i = 1, 20 do
+                    rgbSpeed = math.random(3, 8)
+                    rgbHue = math.random()
+                    wait(0.05)
+                end
+                rgbSpeed = originalSpeed
+            end)
+            notify("⚡ Lightning", "Lightning effect activated!", 2)
+        else
+            notify("❌ Enable RGB", "Enable RGB UI first!", 2)
+        end
+    end
+})
+
+RGBTab:CreateButton({
+    Name = "🌊 Wave Effect",
+    Callback = function()
+        if rgbEnabled then
+            -- Create wave effect
+            spawn(function()
+                local originalSpeed = rgbSpeed
+                rgbSpeed = 0.5
+                for i = 1, 100 do
+                    rgbSaturation = math.sin(i * 0.1) * 0.5 + 0.5
+                    rgbBrightness = math.cos(i * 0.1) * 0.3 + 0.7
+                    wait(0.1)
+                end
+                rgbSaturation = 1
+                rgbBrightness = 1
+                rgbSpeed = originalSpeed
+            end)
+            notify("🌊 Wave", "Wave effect activated!", 2)
+        else
+            notify("❌ Enable RGB", "Enable RGB UI first!", 2)
+        end
+    end
+})
+
+-- ╔═══════════════════════════════════════════════════════════════════════╗
+-- ║                         SETTINGS TAB                                  ║
+-- ╚═══════════════════════════════════════════════════════════════════════╝
+
+local SettingsTab = Window:CreateTab("⚙️ Settings", 4335486884)
+
+SettingsTab:CreateLabel("🎮 Executor: " .. executor)
+SettingsTab:CreateLabel("📱 Platform: " .. (isMobile and "Mobile" or "PC"))
+SettingsTab:CreateLabel("🔧 UI Library: Rayfield")
+SettingsTab:CreateLabel("🌈 RGB Edition: v3.0.2")
+
+SettingsTab:CreateButton({
+    Name = "🧹 Cleanup All Features",
+    Callback = function()
+        cleanupAllConnections()
+        
+        -- Reset character modifications
+        local humanoid = getHumanoid()
+        if humanoid then
+            humanoid.WalkSpeed = 16
+            humanoid.JumpPower = 50
+        end
+        
+        -- Clean up ESP
+        for _, espObj in pairs(espObjects) do
+            if espObj and espObj.Parent then
+                espObj:Destroy()
+            end
+        end
+        espObjects = {}
+        
+        -- Reset lighting
+        pcall(function()
+            Lighting.Brightness = 1
+            Lighting.ClockTime = 12
+            Lighting.FogEnd = 100000
+            Lighting.GlobalShadows = true
+            Lighting.OutdoorAmbient = Color3.fromRGB(70, 70, 70)
+        end)
+        
+        -- Clean up fly objects
+        if flyBodyVelocity then flyBodyVelocity:Destroy() end
+        if flyBodyAngularVelocity then flyBodyAngularVelocity:Destroy() end
+        
+        -- Reset flags
+        flyEnabled = false
+        noclipEnabled = false
+        espEnabled = false
+        aimbotEnabled = false
+        autoClickerEnabled = false
+        chatSpamEnabled = false
+        antiAfkEnabled = false
+        infiniteJumpEnabled = false
+        fullbrightEnabled = false
+        rgbEnabled = false
+        
+        notify("🧹 Cleanup", "All features cleaned up!", 3)
+    end
+})
+
+SettingsTab:CreateButton({
+    Name = "📊 Performance Info",
+    Callback = function()
+        local info = string.format([[
+🎮 Executor: %s
+📱 Platform: %s
+⚡ Active Features: %d
+🌈 RGB Mode: %s
+💾 Memory: %s MB
+📡 Ping: %s ms
+⏱️ Uptime: %ds
+        ]], 
+        executor,
+        isMobile and "Mobile" or "PC",
+        activeConnections,
+        rgbEnabled and "ON" or "OFF",
+        pcall(function() return tostring(math.floor(game:GetService("Stats"):GetTotalMemoryUsageMb())) end) and tostring(math.floor(game:GetService("Stats"):GetTotalMemoryUsageMb())) or "N/A",
+        pcall(function() return tostring(math.floor(LocalPlayer:GetNetworkPing() * 1000)) end) and tostring(math.floor(LocalPlayer:GetNetworkPing() * 1000)) or "N/A",
+        math.floor(tick() - scriptStartTime)
+        )
+        setClipboard(info)
+    end
+})
+
+-- ╔═══════════════════════════════════════════════════════════════════════╗
+-- ║                         CREDITS TAB                                   ║
+-- ╚═══════════════════════════════════════════════════════════════════════╝
+
+local CreditsTab = Window:CreateTab("📜 Credits", 4335489547)
+
+CreditsTab:CreateLabel("🌈 Tux's FREE Menu - RGB Edition")
+CreditsTab:CreateLabel("👨‍💻 Created by: Tux Skidder")
+CreditsTab:CreateLabel("🌟 Version: 3.0.2 - RGB Edition")
+CreditsTab:CreateLabel("📱 Mobile & PC Compatible")
+CreditsTab:CreateLabel("🔧 Works on: Xeno, Delta, Fluxus, Arceus X, etc.")
+CreditsTab:CreateLabel("🌈 New: RGB UI Customization!")
+CreditsTab:CreateLabel("")
+CreditsTab:CreateLabel("🔗 Join our Discord for more scripts!")
+
+CreditsTab:CreateButton({
+    Name = "📋 Copy Discord Invite",
+    Callback = function()
+        setClipboard("https://discord.gg/4F7rMQtGhe")
+    end
+})
+
+CreditsTab:CreateButton({
+    Name = "🌐 Get More Scripts",
+    Callback = function()
+        setClipboard("github.com/tuxskidder/nova-scripts")
+    end
+})
+
+CreditsTab:CreateButton({
+    Name = "⭐ Support the Project",
+    Callback = function()
+        setClipboard("Thanks for using Tux's FREE Menu RGB Edition! Please star our repository and share with friends!")
+    end
+})
+
+CreditsTab:CreateLabel("")
+CreditsTab:CreateLabel("🙏 Thanks for using Tux's FREE Menu!")
+CreditsTab:CreateLabel("💝 This script is completely free and open source")
+CreditsTab:CreateLabel("🌈 Enjoy the new RGB features!")
+
+-- ╔═══════════════════════════════════════════════════════════════════════╗
+-- ║                        INITIALIZATION                                 ║
+-- ╚═══════════════════════════════════════════════════════════════════════╝
+
+-- Character respawn handling
+LocalPlayer.CharacterAdded:Connect(function(character)
+    wait(2) -- Wait for character to fully load
+    
+    -- Reapply speed/jump if they were modified
+    local humanoid = getHumanoid()
+    if humanoid then
+        if walkSpeed ~= 16 then
+            humanoid.WalkSpeed = walkSpeed
+        end
+        if jumpPower ~= 50 then
+            if humanoid.JumpPower then
+                humanoid.JumpPower = jumpPower
+            elseif humanoid.JumpHeight then
+                humanoid.JumpHeight = jumpPower / 4
+            end
+        end
+    end
+    
+    -- Reapply ESP if enabled
+    if espEnabled then
+        wait(1)
+        for _, player in pairs(Players:GetPlayers()) do
+            if player ~= LocalPlayer and player.Character then
+                pcall(function()
+                    local highlight = Instance.new("Highlight")
+                    highlight.Name = "TuxESP"
+                    highlight.FillColor = espColor
+                    highlight.OutlineColor = Color3.new(1, 1, 1)
+                    highlight.FillTransparency = 0.5
+                    highlight.OutlineTransparency = 0
+                    highlight.Parent = player.Character
+                    table.insert(espObjects, highlight)
+                end)
+            end
+        end
+    end
+end)
+
+-- Cleanup on leaving
+game:BindToClose(function()
+    cleanupAllConnections()
+end)
+
+-- Final notifications
+notify("🎉 Success!", "Tux's FREE Menu RGB Edition loaded successfully!", 3)
+notify("📱 Platform", (isMobile and "Mobile mode enabled!" or "PC mode enabled!"), 2)
+notify("🔧 Executor", "Running on: " .. executor, 2)
+notify("🌈 RGB UI", "New RGB UI features available!", 3)
+
+-- Console output
+warn("✅ Tux's FREE Menu v3.0.2 - RGB Edition loaded!")
+warn("📱 Platform: " .. (isMobile and "Mobile" or "PC"))
+warn("🔧 Executor: " .. executor)
+warn("🌈 RGB UI: Available and ready!")
+warn("🌟 All features are now compatible with your executor!")
+warn("📋 Total lines: 1000+ (RGB Universal compatibility)")
+
+-- Success message
+print([[
+╔═══════════════════════════════════════════════════╗
+║       TUX'S FREE MENU RGB EDITION LOADED!        ║
+║                                                   ║
+║  ✅ Universal Compatibility                      ║
+║  📱 Mobile & PC Support                          ║
+║  🔧 Works with all major executors               ║
+║  🎯 Optimized for performance                    ║
+║  🌈 NEW: RGB UI Customization!                  ║
+║                                                   ║
+║  Enjoy the rainbow experience!                   ║
+╚═══════════════════════════════════════════════════╝
+]]) Error", "Character not found! Try respawning.", 3)
                 return
             end
             
@@ -841,18 +1321,10 @@ VisualTab:CreateToggle({
                 end)
             end)
             
-            -- Update existing players
-            connections["esp_spawn"] = Players.PlayerAdded:Connect(function(player)
-                if player.Character then
-                    addESP(player)
-                end
-            end)
-            
-            activeConnections = activeConnections + 2
+            activeConnections = activeConnections + 1
             notify("✅ ESP", "Player ESP enabled!", 2)
         else
             cleanupConnection("esp_added")
-            cleanupConnection("esp_spawn")
             notify("❌ ESP", "Player ESP disabled!", 2)
         end
     end
@@ -920,54 +1392,20 @@ VisualTab:CreateToggle({
 
 local CombatTab = Window:CreateTab("⚔️ Combat", 4335454746)
 
--- Aimbot FOV Circle Toggle
-CombatTab:CreateToggle({
-    Name = "👁️ Show FOV Circle",
-    CurrentValue = false,
-    Flag = "show_fov_circle",
-    Callback = function(Value)
-        aimbotShowFOV = Value
-        
-        if Value and Drawing then
-            if not aimbotCircle then
-                aimbotCircle = createFOVCircle()
-            end
-        elseif aimbotCircle then
-            aimbotCircle.Visible = false
-        end
-        
-        notify("👁️ FOV Circle", Value and "Enabled" or "Disabled", 2)
-    end
-})
-
--- Aimbot FOV Slider
+-- Aimbot FOV
 CombatTab:CreateSlider({
     Name = "Aimbot FOV",
-    Range = {10, 500},
+    Range = {10, 360},
     Increment = 1,
-    Suffix = " pixels",
+    Suffix = "°",
     CurrentValue = 100,
     Flag = "aimbot_fov",
     Callback = function(Value)
         aimbotFOV = Value
-        updateFOVCircle()
     end
 })
 
--- Aimbot Smoothness
-CombatTab:CreateSlider({
-    Name = "Aimbot Smoothness",
-    Range = {0.1, 5},
-    Increment = 0.1,
-    Suffix = "x",
-    CurrentValue = 1,
-    Flag = "aimbot_smoothness",
-    Callback = function(Value)
-        aimbotSmoothness = Value
-    end
-})
-
--- Universal Aimbot
+-- Aimbot
 CombatTab:CreateToggle({
     Name = "🎯 Universal Aimbot",
     CurrentValue = false,
@@ -977,453 +1415,22 @@ CombatTab:CreateToggle({
         cleanupConnection("aimbot")
         
         if Value then
-            -- Create FOV circle if enabled
-            if aimbotShowFOV and Drawing and not aimbotCircle then
-                aimbotCircle = createFOVCircle()
-            end
-            
             connections["aimbot"] = RunService.Heartbeat:Connect(function()
-                updateFOVCircle()
-                
-                local target = getAimbotTarget()
-                if target and target.part and Camera then
-                    pcall(function()
-                        local currentCFrame = Camera.CFrame
-                        local targetPosition = target.part.Position
-                        
-                        -- Smooth aiming
-                        local lookDirection = (targetPosition - currentCFrame.Position).Unit
-                        local newCFrame = CFrame.lookAt(currentCFrame.Position, targetPosition)
-                        
-                        -- Apply smoothness
-                        if aimbotSmoothness > 0.1 then
-                            Camera.CFrame = currentCFrame:Lerp(newCFrame, 1 / aimbotSmoothness)
-                        else
-                            Camera.CFrame = newCFrame
+                local target, distance = getClosestPlayer(aimbotFOV)
+                if target and distance then
+                    local targetChar = getCharacter(target, 1)
+                    if targetChar then
+                        local targetHead = targetChar:FindFirstChild("Head")
+                        if targetHead and Camera then
+                            pcall(function()
+                                local lookDirection = (targetHead.Position - Camera.CFrame.Position).Unit
+                                Camera.CFrame = CFrame.lookAt(Camera.CFrame.Position, targetHead.Position)
+                            end)
                         end
-                    end)
+                    end
                 end
             end)
             activeConnections = activeConnections + 1
             notify("✅ Aimbot", "Universal aimbot enabled!", 2)
         else
-            if aimbotCircle then
-                aimbotCircle.Visible = false
-            end
-            notify("❌ Aimbot", "Universal aimbot disabled!", 2)
-        end
-    end
-})
-
--- DaHood Silent Aim
-CombatTab:CreateToggle({
-    Name = "🔇 Silent Aim (DaHood)",
-    CurrentValue = false,
-    Flag = "silent_aim_toggle",
-    Callback = function(Value)
-        silentAimEnabled = Value
-        
-        if Value then
-            -- Create FOV circle if enabled
-            if aimbotShowFOV and Drawing and not aimbotCircle then
-                aimbotCircle = createFOVCircle()
-            end
-            
-            -- Setup silent aim hook
-            setupSilentAim()
-            
-            connections["silent_aim_visual"] = RunService.Heartbeat:Connect(function()
-                updateFOVCircle()
-            end)
-            
-            activeConnections = activeConnections + 1
-            notify("✅ Silent Aim", "DaHood silent aim enabled!", 2)
-        else
-            if aimbotCircle then
-                aimbotCircle.Visible = false
-            end
-            cleanupConnection("silent_aim_visual")
-            notify("❌ Silent Aim", "DaHood silent aim disabled!", 2)
-        end
-    end
-})
-
--- Auto clicker speed with higher range
-CombatTab:CreateSlider({
-    Name = "Auto Click Speed",
-    Range = {1, 500},
-    Increment = 1,
-    Suffix = " cps",
-    CurrentValue = 10,
-    Flag = "click_speed",
-    Callback = function(Value)
-        clickSpeed = Value
-    end
-})
-
--- Enhanced Auto clicker
-CombatTab:CreateToggle({
-    Name = "🖱️ Enhanced Auto Clicker",
-    CurrentValue = false,
-    Flag = "auto_clicker",
-    Callback = function(Value)
-        autoClickerEnabled = Value
-        cleanupConnection("auto_clicker")
-        
-        if Value then
-            -- High-performance clicking for high CPS
-            if clickSpeed > 50 then
-                connections["auto_clicker"] = RunService.Heartbeat:Connect(function()
-                    if autoClickerEnabled then
-                        performClick()
-                    end
-                end)
-            else
-                connections["auto_clicker"] = task.spawn(function()
-                    while autoClickerEnabled do
-                        performClick()
-                        task.wait(1 / clickSpeed)
-                    end
-                end)
-            end
-            
-            activeConnections = activeConnections + 1
-            notify("✅ Auto Click", "Enhanced auto clicker enabled! (" .. clickSpeed .. " CPS)", 2)
-        else
-            notify("❌ Auto Click", "Enhanced auto clicker disabled!", 2)
-        end
-    end
-})
-
--- Kill Aura
-CombatTab:CreateToggle({
-    Name = "⚔️ Kill Aura",
-    CurrentValue = false,
-    Flag = "kill_aura",
-    Callback = function(Value)
-        killAuraEnabled = Value
-        cleanupConnection("kill_aura")
-        
-        if Value then
-            connections["kill_aura"] = RunService.Heartbeat:Connect(function()
-                local target = getAimbotTarget()
-                if target and target.part then
-                    performClick()
-                end
-            end)
-            activeConnections = activeConnections + 1
-            notify("✅ Kill Aura", "Kill aura enabled!", 2)
-        else
-            notify("❌ Kill Aura", "Kill aura disabled!", 2)
-        end
-    end
-})
-
--- ╔═══════════════════════════════════════════════════════════════════════╗
--- ║                      MISCELLANEOUS TAB                                ║
--- ╚═══════════════════════════════════════════════════════════════════════╝
-
-local MiscTab = Window:CreateTab("🔧 Misc", 4335486884)
-
--- Anti AFK
-MiscTab:CreateToggle({
-    Name = "😴 Anti AFK",
-    CurrentValue = false,
-    Flag = "anti_afk",
-    Callback = function(Value)
-        antiAfkEnabled = Value
-        cleanupConnection("anti_afk")
-        
-        if Value then
-            connections["anti_afk"] = LocalPlayer.Idled:Connect(function()
-                pcall(function()
-                    VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.LeftShift, false, game)
-                    wait(0.1)
-                    VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.LeftShift, false, game)
-                end)
-            end)
-            activeConnections = activeConnections + 1
-            notify("✅ Anti AFK", "Anti AFK enabled!", 2)
-        else
-            notify("❌ Anti AFK", "Anti AFK disabled!", 2)
-        end
-    end
-})
-
--- Chat spam message
-MiscTab:CreateInput({
-    Name = "Chat Message",
-    PlaceholderText = "Enter message to spam...",
-    RemoveTextAfterFocusLost = false,
-    Callback = function(Text)
-        spamMessage = Text
-    end
-})
-
--- Chat spam delay
-MiscTab:CreateSlider({
-    Name = "Spam Delay",
-    Range = {0.5, 10},
-    Increment = 0.1,
-    Suffix = "s",
-    CurrentValue = 1,
-    Flag = "spam_delay",
-    Callback = function(Value)
-        spamDelay = Value
-    end
-})
-
--- Chat spam toggle
-MiscTab:CreateToggle({
-    Name = "💬 Chat Spam",
-    CurrentValue = false,
-    Flag = "chat_spam",
-    Callback = function(Value)
-        chatSpamEnabled = Value
-        cleanupConnection("chat_spam")
-        
-        if Value then
-            connections["chat_spam"] = task.spawn(function()
-                while chatSpamEnabled do
-                    pcall(function()
-                        -- Try multiple chat methods for compatibility
-                        if ReplicatedStorage:FindFirstChild("DefaultChatSystemChatEvents") then
-                            local chatEvents = ReplicatedStorage.DefaultChatSystemChatEvents
-                            if chatEvents:FindFirstChild("SayMessageRequest") then
-                                chatEvents.SayMessageRequest:FireServer(spamMessage, "All")
-                            end
-                        elseif game:GetService("TextChatService") then
-                            local textChatService = game:GetService("TextChatService")
-                            if textChatService.TextChannels and textChatService.TextChannels.RBXGeneral then
-                                textChatService.TextChannels.RBXGeneral:SendAsync(spamMessage)
-                            end
-                        end
-                    end)
-                    wait(spamDelay)
-                end
-            end)
-            activeConnections = activeConnections + 1
-            notify("✅ Chat Spam", "Chat spam enabled!", 2)
-        else
-            notify("❌ Chat Spam", "Chat spam disabled!", 2)
-        end
-    end
-})
-
--- Reset character
-MiscTab:CreateButton({
-    Name = "💀 Reset Character",
-    Callback = function()
-        pcall(function()
-            local humanoid = getHumanoid()
-            if humanoid then
-                humanoid.Health = 0
-                notify("💀 Reset", "Character reset!", 2)
-            end
-        end)
-    end
-})
-
--- Respawn character
-MiscTab:CreateButton({
-    Name = "🔄 Respawn",
-    Callback = function()
-        pcall(function()
-            LocalPlayer:LoadCharacter()
-            notify("🔄 Respawn", "Character respawned!", 2)
-        end)
-    end
-})
-
--- ╔═══════════════════════════════════════════════════════════════════════╗
--- ║                         SETTINGS TAB                                  ║
--- ╚═══════════════════════════════════════════════════════════════════════╝
-
-local SettingsTab = Window:CreateTab("⚙️ Settings", 4335486884)
-
-SettingsTab:CreateLabel("🎮 Executor: " .. executor)
-SettingsTab:CreateLabel("📱 Platform: " .. (isMobile and "Mobile" or "PC"))
-SettingsTab:CreateLabel("🔧 UI Library: Rayfield")
-
-SettingsTab:CreateButton({
-    Name = "🧹 Cleanup All Features",
-    Callback = function()
-        cleanupAllConnections()
-        
-        -- Reset character modifications
-        local humanoid = getHumanoid()
-        if humanoid then
-            humanoid.WalkSpeed = 16
-            humanoid.JumpPower = 50
-        end
-        
-        -- Clean up ESP
-        for _, espObj in pairs(espObjects) do
-            if espObj and espObj.Parent then
-                espObj:Destroy()
-            end
-        end
-        espObjects = {}
-        
-        -- Reset lighting
-        pcall(function()
-            Lighting.Brightness = 1
-            Lighting.ClockTime = 12
-            Lighting.FogEnd = 100000
-            Lighting.GlobalShadows = true
-            Lighting.OutdoorAmbient = Color3.fromRGB(70, 70, 70)
-        end)
-        
-        -- Clean up fly objects
-        if flyBodyVelocity then flyBodyVelocity:Destroy() end
-        if flyBodyAngularVelocity then flyBodyAngularVelocity:Destroy() end
-        
-        -- Reset flags
-        flyEnabled = false
-        noclipEnabled = false
-        espEnabled = false
-        aimbotEnabled = false
-        autoClickerEnabled = false
-        chatSpamEnabled = false
-        antiAfkEnabled = false
-        infiniteJumpEnabled = false
-        fullbrightEnabled = false
-        
-        notify("🧹 Cleanup", "All features cleaned up!", 3)
-    end
-})
-
-SettingsTab:CreateButton({
-    Name = "📊 Performance Info",
-    Callback = function()
-        local info = string.format([[
-🎮 Executor: %s
-📱 Platform: %s
-⚡ Active Features: %d
-💾 Memory: %s MB
-📡 Ping: %s ms
-⏱️ Uptime: %ds
-        ]], 
-        executor,
-        isMobile and "Mobile" or "PC",
-        activeConnections,
-        pcall(function() return tostring(math.floor(game:GetService("Stats"):GetTotalMemoryUsageMb())) end) and tostring(math.floor(game:GetService("Stats"):GetTotalMemoryUsageMb())) or "N/A",
-        pcall(function() return tostring(math.floor(LocalPlayer:GetNetworkPing() * 1000)) end) and tostring(math.floor(LocalPlayer:GetNetworkPing() * 1000)) or "N/A",
-        math.floor(tick() - scriptStartTime)
-        )
-        setClipboard(info)
-    end
-})
-
--- ╔═══════════════════════════════════════════════════════════════════════╗
--- ║                         CREDITS TAB                                   ║
--- ╚═══════════════════════════════════════════════════════════════════════╝
-
-local CreditsTab = Window:CreateTab("📜 Credits", 4335489547)
-
-CreditsTab:CreateLabel("🎉 Tux's FREE Menu - Universal Edition")
-CreditsTab:CreateLabel("👨‍💻 Created by: Tux Skidder")
-CreditsTab:CreateLabel("🌟 Version: 3.0.1 - Fixed & Universal")
-CreditsTab:CreateLabel("📱 Mobile & PC Compatible")
-CreditsTab:CreateLabel("🔧 Works on: Xeno, Delta, Fluxus, Arceus X, etc.")
-CreditsTab:CreateLabel("")
-CreditsTab:CreateLabel("🔗 Join our Discord for more scripts!")
-
-CreditsTab:CreateButton({
-    Name = "📋 Copy Discord Invite",
-    Callback = function()
-        setClipboard("https://discord.gg/4F7rMQtGhe")
-    end
-})
-
-CreditsTab:CreateButton({
-    Name = "🌐 Get More Scripts",
-    Callback = function()
-        setClipboard("github.com/tuxskidder/nova-scripts")
-    end
-})
-
-CreditsTab:CreateButton({
-    Name = "⭐ Support the Project",
-    Callback = function()
-        setClipboard("Thanks for using Tux's FREE Menu! Please star our repository and share with friends!")
-    end
-})
-
-CreditsTab:CreateLabel("")
-CreditsTab:CreateLabel("🙏 Thanks for using Tux's FREE Menu!")
-CreditsTab:CreateLabel("💝 This script is completely free and open source")
-
--- ╔═══════════════════════════════════════════════════════════════════════╗
--- ║                        INITIALIZATION                                 ║
--- ╚═══════════════════════════════════════════════════════════════════════╝
-
--- Character respawn handling
-LocalPlayer.CharacterAdded:Connect(function(character)
-    wait(2) -- Wait for character to fully load
-    
-    -- Reapply speed/jump if they were modified
-    local humanoid = getHumanoid()
-    if humanoid then
-        if walkSpeed ~= 16 then
-            humanoid.WalkSpeed = walkSpeed
-        end
-        if jumpPower ~= 50 then
-            if humanoid.JumpPower then
-                humanoid.JumpPower = jumpPower
-            elseif humanoid.JumpHeight then
-                humanoid.JumpHeight = jumpPower / 4
-            end
-        end
-    end
-    
-    -- Reapply ESP if enabled
-    if espEnabled then
-        wait(1)
-        for _, player in pairs(Players:GetPlayers()) do
-            if player ~= LocalPlayer and player.Character then
-                pcall(function()
-                    local highlight = Instance.new("Highlight")
-                    highlight.Name = "TuxESP"
-                    highlight.FillColor = espColor
-                    highlight.OutlineColor = Color3.new(1, 1, 1)
-                    highlight.FillTransparency = 0.5
-                    highlight.OutlineTransparency = 0
-                    highlight.Parent = player.Character
-                    table.insert(espObjects, highlight)
-                end)
-            end
-        end
-    end
-end)
-
--- Cleanup on leaving
-game:BindToClose(function()
-    cleanupAllConnections()
-end)
-
--- Final notifications
-notify("🎉 Success!", "Tux's FREE Menu loaded successfully!", 3)
-notify("📱 Platform", (isMobile and "Mobile mode enabled!" or "PC mode enabled!"), 2)
-notify("🔧 Executor", "Running on: " .. executor, 2)
-
--- Console output
-warn("✅ Tux's FREE Menu v3.0.1 - Universal Edition loaded!")
-warn("📱 Platform: " .. (isMobile and "Mobile" or "PC"))
-warn("🔧 Executor: " .. executor)
-warn("🌟 All features are now compatible with your executor!")
-warn("📋 Total lines: 800+ (Universal compatibility)")
-
--- Success message
-print([[
-╔═══════════════════════════════════════════════════╗
-║            TUX'S FREE MENU LOADED!               ║
-║                                                   ║
-║  ✅ Universal Compatibility                      ║
-║  📱 Mobile & PC Support                          ║
-║  🔧 Works with all major executors               ║
-║  🎯 Optimized for performance                    ║
-║                                                   ║
-║  Enjoy using Tux's FREE Menu!                    ║
-╚═══════════════════════════════════════════════════╝
-]])
+            notify("❌
