@@ -1,6 +1,6 @@
 -- ===============================================
--- Enhanced Grow a Garden Script - 800+ Lines
--- Advanced Roblox Script with Complete Features
+-- Tux's KEYLESS GAG MENU
+-- made by tux and moon
 -- ===============================================
 
 -- Load Rayfield UI Library
@@ -39,10 +39,10 @@ local Head = Character:WaitForChild("Head")
 -- SCRIPT CONFIGURATION AND STATES
 -- ===============================================
 local ScriptConfig = {
-    Version = "2.0.1",
-    Author = "AI Enhanced",
-    LastUpdated = "2025-08-19",
-    DiscordInvite = "https://discord.gg/example"
+    Version = "1.9.2",
+    Author = "Tux's KEYLESS GAG MENU",
+    LastUpdated = "TODAY !!!",
+    DiscordInvite = "https://discord.gg/RYjZEpgSsR"
 }
 
 local ScriptStates = {
