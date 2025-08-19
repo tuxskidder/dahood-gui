@@ -1501,9 +1501,9 @@ spawn(function()
 end)
 
 -- Script completion message
-print("🌱 Grow a Garden Ultimate Hub v" .. ScriptConfig.Version .. " loaded successfully!")
-print("📊 Total lines of code: 800+")
-print("🎯 All features active and ready to use!")
+print("🌱 Tux's KEYLESS GAG MENU" .. ScriptConfig.Version .. " loaded successfully!")
+print("📊 MADE BY TUX +")
+print("🎯 CREDITS TO MOONIDTY FOR PROTECTION AND HELP MAKE!")
 
 -- ===============================================
 -- END OF SCRIPT
